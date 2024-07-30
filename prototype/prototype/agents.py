@@ -36,28 +36,13 @@ class PostAssociations(BaseModel):
 def initiate_conversation_classification_agent():
     # Components
     model = ChatOpenAI(model="gpt-4o-mini")
-    structured_model = model.with_structured_output(
-        ConversationClassification, method="json_mode"
-    )
-
-    # Prompt
-    system_template = """
-    # IDENTITY and PURPOSE 
-    You are an expert at classifying social network conversations as about climate change or not.
-
-    # STEPS
-    1. Ingest the first json object which has all the posts from a social network conversation.
-    2. Parse all posts and determine if the conversation is about climate change.
-    3. If the conversation is about climate change, classify it as True. Otherwise, classify it as False.
-    4. Each classification should have the conversation's id.
-    """
+    structured_model = model.with_structured_output(ConversationClassification)
 
     prompt_template = ChatPromptTemplate.from_messages(
         [
-            ("system", system_template),
             (
                 "human",
-                "Here's a json object which has all the posts from a social network conversation: {conversation_posts_json}",
+                "Classify whether  this conversation is about climate change or not: {conversation_posts_json}",
             ),
         ]
     )
@@ -71,7 +56,7 @@ def initiate_conversation_classification_agent():
 @traceable
 def initiate_post_association_agent():
     # Components
-    model = ChatOpenAI(model="gpt-4o-mini")
+    model = ChatOpenAI(model="gpt-4o")
     parser = PydanticOutputParser(pydantic_object=PostAssociations)
 
     # Prompt
