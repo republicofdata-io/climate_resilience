@@ -3,15 +3,15 @@ from typing import List
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
 
-class ConversationIsAboutClimateChange(BaseModel):
+class ConversationClassification(BaseModel):
     """Classify if a conversation is about climate change"""
 
     conversation_id: str = Field(description="A conversation's id")
-    is_about_climate_change: bool = Field(
+    classification: bool = Field(
         description="Whether the conversation is about climate change"
     )
 
@@ -33,10 +33,12 @@ class PostAssociations(BaseModel):
 
 # Agent to classify conversations as about climate change or not
 @traceable
-def initiate_climate_change_classification_agent():
+def initiate_conversation_classification_agent():
     # Components
-    model = ChatOllama(model="llama3.1")
-    parser = PydanticOutputParser(pydantic_object=ConversationIsAboutClimateChange)
+    model = ChatOpenAI(model="gpt-4o-mini")
+    structured_model = model.with_structured_output(
+        ConversationClassification, method="json_mode"
+    )
 
     # Prompt
     system_template = """
@@ -46,11 +48,8 @@ def initiate_climate_change_classification_agent():
     # STEPS
     1. Ingest the first json object which has all the posts from a social network conversation.
     2. Parse all posts and determine if the conversation is about climate change.
-    3. If the conversation is about climate change, classify it as YES. Otherwise, classify it as NO.
+    3. If the conversation is about climate change, classify it as True. Otherwise, classify it as False.
     4. Each classification should have the conversation's id.
-
-    # OUTPUT INSTRUCTIONS
-    {format_instructions}
     """
 
     prompt_template = ChatPromptTemplate.from_messages(
@@ -61,18 +60,18 @@ def initiate_climate_change_classification_agent():
                 "Here's a json object which has all the posts from a social network conversation: {conversation_posts_json}",
             ),
         ]
-    ).partial(format_instructions=parser.get_format_instructions())
+    )
 
     # Task
-    chain = prompt_template | model | parser
+    chain = prompt_template | structured_model
     return chain
 
 
 # Agent to classify posts to discourses
 @traceable
-def initiate_discourse_association_agent():
+def initiate_post_association_agent():
     # Components
-    model = ChatOllama(model="llama3.1")
+    model = ChatOpenAI(model="gpt-4o-mini")
     parser = PydanticOutputParser(pydantic_object=PostAssociations)
 
     # Prompt
