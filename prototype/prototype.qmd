@@ -1,0 +1,195 @@
+---
+title: "The Geography of Climate Discourses"
+format: 
+  html:
+    code-fold: false
+execute:
+  message: false
+  warning: false
+---
+
+Our objective is to capture climate discourses from social networks and understand mindframes on climate change by geography.
+
+To accomplish this, we will use the following design.
+![Prototype Design](images/prototype_design.png)
+
+- We will have a database that holds the configurations about the media feeds and social networks to scrape.
+- We then have 2 data products that are responsible for collecting and exposing media articles and social network conversations.
+- Finally, we will have an AI agent that will analyze the conversations and classify them into 4 discourse types.
+
+This notebook is a prototype of that design, a proof of concept to show how we can leverage the data we collected to understand climate discourses by geography.
+
+## Theoretical Framework
+Let's first talk about the theoretical framework we are using to classify the discourses.
+
+We will be referring to the [Climate and Society](https://www.amazon.com/Climate-Society-Transforming-Future-Leichenko/dp/0745684394) book by Robin Lecheinko and Karen O’Brien.
+
+In this book, the authors propose a framework to understand the different discourses on climate change. They identify 4 main discourses:
+
+1. **Biophysical**: "Climate change is an environmental problem caused by rising concentrations of greenhouse gases from human activities. Climate change can be addressed through policies, technologies, and behavioural changes that reduce greehouse gas emissions and support adaptation."
+2. **Critical**: "Climate change is a social problem caused by economic, political, and cultureal procsses that contribute to uneven and unsustainable patterns of development and energy usage. Addressing climate change requires challenging economic systems and power structures that perpetuate high levels of fossil fuel consumption."
+3. **Dismissive**: "Climate change is not a problem at all or at least not an urgent concern. No action is needed to address climate change, and other issues should be prioritized."
+4. **Integrative**: "Climate change is an environmental and social problem that is rooted in particular beliefs and perceptions of human-environment relationships and humanity's place in the world. Addressing climate change requires challenging mindsets, norms, rules, institutions, and policies that support unsustainable resource use and practice."
+
+We will use this framework to classify the discourses we collect from social networks.
+
+## Data
+Back in early 2024, we collected conversations from X that discussed climate-related articles from the New York Times.
+
+- The data spans from Mars 28, 2024 to May 30.
+- During that time, we collected 655 articles, 7164 conversations and 7974 posts.
+- Those posts came from 6578 users.
+- Of those users, we were able to geolocate 3005 of them.
+- That gives us 2071 posts with geolocation data for the users.
+- Of those posts, we have 1380 posts geolocated in the United States.
+
+```{r}
+#| echo: false
+#| results: hide
+library(reticulate)
+library(dplyr)
+library(ggplot2)
+
+virtualenv_path <- system("poetry env info --path", intern = TRUE)
+use_virtualenv(virtualenv_path, required = TRUE)
+```
+Let's load that sample data.
+
+```{r}
+posts_df <- read.csv("data/climate_conversations.csv")
+```
+
+And have a glimpse.
+```{r}
+glimpse(posts_df)
+```
+
+## Discourses
+In a [previous initiative](https://blog.republicofdata.io/enforcing-structure-and-assembling-our-ai-agent-2/), we had developed an AI agent that could associate narratives to posts within a conversation. 
+
+For reference, we are only pasting here the code we used to classify our posts. This is a non-executable cell, as it does require heavy and costly interactions with the OpenAI API. Please refer to that article above for implementation details. 
+
+<details>
+<summary>See code</summary>
+```python
+import json
+import re
+from typing import List
+
+import pandas as pd
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_openai import ChatOpenAI
+from langsmith import traceable
+
+
+# Define classes for LLM task output
+class Narrative(BaseModel):
+    """Information about a narrative."""
+
+    label: str = Field(
+        description="A representative label to identify the identified narrative"
+    )
+    description: str = Field(description="A short description of the narrative")
+
+
+class Narratives(BaseModel):
+    """Identifying information about all narratives in a conversation."""
+
+    narratives: List[Narrative]
+
+
+def remove_user_mentions(text):
+    return re.sub(r"@\w+", "", text).strip()
+
+
+def get_conversations():
+    # Load data
+    conversations_df = pd.read_csv("data/climate_conversations.csv")
+
+    # Sort conversations
+    conversations_sorted_df = conversations_df.sort_values(by="post_creation_ts")[
+        ["conversation_id", "post_id", "post_creation_ts", "post_text"]
+    ]
+
+    # Remove user mentions from post_text
+    conversations_sorted_df["post_text"] = conversations_sorted_df["post_text"].apply(
+        remove_user_mentions
+    )
+
+    # Group by conversation_natural_key and aggregate post_texts into a list ordered by post_creation_ts
+    conversations_sorted_df = (
+        conversations_sorted_df.groupby("conversation_id")
+        .apply(
+            lambda x: x.sort_values("post_creation_ts")[
+                ["post_id", "post_creation_ts", "post_text"]
+            ].to_dict(orient="records")
+        )
+        .reset_index(name="posts")
+    )
+
+    return conversations_sorted_df
+
+
+@traceable
+def initiate_narratives_agent():
+    # Components
+    model = ChatOpenAI(model="gpt-4")
+    parser = PydanticOutputParser(pydantic_object=Narratives)
+
+    # Prompt
+    system_template = """
+    # IDENTITY and PURPOSE 
+    You are an expert at extracting narratives from conversations.
+
+    # STEPS
+    1. Ingest the json file which has conversations on climate change
+    2. Take your time to process all its entries
+    3. Parse all conversations and extract all narratives
+    4. Each narrative should have a label and a short description (5 to 10 words)
+
+    # OUTPUT INSTRUCTIONS
+    {format_instructions}
+    """
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_template),
+            ("human", "{text}"),
+        ]
+    ).partial(format_instructions=parser.get_format_instructions())
+
+    # Task
+    chain = prompt_template | model | parser
+    return chain
+
+
+def get_narratives(agent, conversation):
+    conversation_dict = conversation.to_dict()
+    conversation_json = json.dumps(conversation_dict)
+    output = agent.invoke({"text": conversation_json})
+
+    # Convert the Narratives object to a dictionary
+    narratives_dict = output.dict()
+
+    return narratives_dict
+
+
+def main():
+    conversations_df = get_conversations()
+    narratives_agent = initiate_narratives_agent()
+    narratives_json = get_narratives(narratives_agent, conversations_df.iloc[0])
+    print(narratives_json)
+
+
+if __name__ == "__main__":
+    main()
+```
+</details>
+
+Let's now load the narratives we classified.
+
+## Map
+Hex map of which of the 4 discourse types are most prevalent by geography

@@ -1,0 +1,14 @@
+# Environments
+.venv
+.env
+*.lock
+
+# Local dev
+.DS_Store
+
+# Data
+*.csv
+
+# Build
+*.html
+*_files
