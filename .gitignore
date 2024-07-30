@@ -10,5 +10,6 @@
 *.csv
 
 # Build
+__pycache__
 *.html
 *_files
