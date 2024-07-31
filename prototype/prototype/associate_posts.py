@@ -2,34 +2,48 @@ import json
 
 import pandas as pd
 
-from prototype.agents import initiate_conversation_classification_agent
+from prototype.agents import initiate_post_association_agent
 from prototype.utils import get_conversations
 
-# TODO: Identify conversations that are about climate change
-# TODO: Loop through all conversations and classify posts
-# TODO: Save classified posts to a new csv file
 conversations_df = get_conversations()
+classifications_df = pd.read_csv("data/conversation_classifications.csv")
 
-# Classify conversations as about climate change or not
-conversation_classifications_df = pd.DataFrame(
-    columns=["conversation_id", "classification"]
-)
-conversation_classification_agent = initiate_conversation_classification_agent()
+# Filter conversations classified as about climate change
+climate_change_conversations_df = conversations_df[
+    conversations_df["conversation_id"].isin(
+        classifications_df[classifications_df["classification"] == True][
+            "conversation_id"
+        ]
+    )
+]
+
+# # Associate posts with a discourse type
+post_associations_df = pd.DataFrame(columns=["post_id", "discourse_type"])
+post_association_agent = initiate_post_association_agent()
 
 # Iterate over all conversations and classify them
-for _, conversation_df in conversations_df.iterrows():
+for _, conversation_df in climate_change_conversations_df.iterrows():
     conversation_dict = conversation_df.to_dict()
     conversation_json = json.dumps(conversation_dict)
 
-    conversation_classifications_output = conversation_classification_agent.invoke(
-        {"conversation_posts_json": conversation_json}
-    )
-    new_classification = pd.DataFrame([conversation_classifications_output.dict()])
-    conversation_classifications_df = pd.concat(
-        [conversation_classifications_df, new_classification], ignore_index=True
-    )
+    try:
+        post_associations_output = post_association_agent.invoke(
+            {"conversation_posts_json": conversation_json}
+        )
+
+        for association in post_associations_output.post_associations:
+            new_row = {
+                "post_id": association.post_id,
+                "discourse_type": association.discourse,
+            }
+            post_associations_df = pd.concat(
+                [post_associations_df, pd.DataFrame([new_row])], ignore_index=True
+            )
+    except Exception as e:
+        print(
+            f"Failed to associate posts in conversation {conversation_df['conversation_id']}"
+        )
+        print(e)
 
 # Save classified conversations to a new csv file
-conversation_classifications_df.to_csv(
-    "data/conversation_classifications.csv", index=False
-)
+post_associations_df.to_csv("data/post_associations_df.csv", index=False)

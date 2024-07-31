@@ -5,9 +5,6 @@ import pandas as pd
 from prototype.agents import initiate_conversation_classification_agent
 from prototype.utils import get_conversations
 
-# TODO: Identify conversations that are about climate change
-# TODO: Loop through all conversations and classify posts
-# TODO: Save classified posts to a new csv file
 conversations_df = get_conversations()
 
 # Classify conversations as about climate change or not

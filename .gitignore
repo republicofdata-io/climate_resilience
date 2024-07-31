@@ -6,9 +6,6 @@
 # Local dev
 .DS_Store
 
-# Data
-*.csv
-
 # Build
 __pycache__
 *.html
