@@ -19,6 +19,8 @@ To accomplish this, we will use the following design.
 
 This notebook is a prototype of that design, a proof of concept to show how we can leverage the data we collected to understand climate discourses by geography.
 
+Please refer to the [public repository](https://github.com/republicofdata-io/climate_resilience) for the full code and documentation.
+
 ## Theoretical Framework
 Let's first talk about the theoretical framework we are using to classify the discourses.
 
@@ -71,10 +73,88 @@ kable(head(conversations_df, n=5))
 ## Climate Conversations
 The conversations can sometime diverge from the original intent. Meaning that not all conversations end up being about climate change. So we used an AI agent to classify which conversations were indeed about climate change.
 
+Here is code for the AI agent that classifies the conversations.
+
 <details>
-<summary>See code</summary>
+<summary>conversation_classification_agent.py</summary>
 ```python
-  #...
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_openai import ChatOpenAI
+from langsmith import traceable
+
+
+class ConversationClassification(BaseModel):
+    """Classify if a conversation is about climate change"""
+
+    conversation_id: str = Field(description="A conversation's id")
+    classification: bool = Field(
+        description="Whether the conversation is about climate change"
+    )
+
+
+# Agent to classify conversations as about climate change or not
+@traceable
+def initiate_conversation_classification_agent():
+    # Components
+    model = ChatOpenAI(model="gpt-4o-mini")
+    structured_model = model.with_structured_output(ConversationClassification)
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "human",
+                "Classify whether  this conversation is about climate change or not: {conversation_posts_json}",
+            ),
+        ]
+    )
+
+    # Task
+    chain = prompt_template | structured_model
+    return chain
+```
+</details>
+
+Then here's the code that uses that agent to classify the conversations.
+
+<details>
+<summary>classify_conversations.py</summary>
+```python
+import json
+
+import pandas as pd
+
+from prototype.conversation_classification_agent import (
+    initiate_conversation_classification_agent,
+)
+from prototype.utils import get_conversations
+
+conversations_df = get_conversations()
+
+# Classify conversations as about climate change or not
+conversation_classifications_df = pd.DataFrame(
+    columns=["conversation_id", "classification"]
+)
+conversation_classification_agent = initiate_conversation_classification_agent()
+
+# Iterate over all conversations and classify them
+for _, conversation_df in conversations_df.iterrows():
+    conversation_dict = conversation_df.to_dict()
+    conversation_json = json.dumps(conversation_dict)
+
+    conversation_classifications_output = conversation_classification_agent.invoke(
+        {"conversation_posts_json": conversation_json}
+    )
+    new_classification = pd.DataFrame([conversation_classifications_output.dict()])
+    conversation_classifications_df = pd.concat(
+        [conversation_classifications_df, new_classification], ignore_index=True
+    )
+
+# Save classified conversations to a new csv file
+conversation_classifications_df.to_csv(
+    "data/conversation_classifications.csv", index=False
+)
 ```
 </details>
 
@@ -82,6 +162,10 @@ Let's see the results of that classification.
 
 ```{r}
 conversation_classifications <- read.csv("../data/conversation_classifications.csv")
+
+conversation_classifications %>%
+  head(n=5) %>%
+  kable()
 ```
 
 Let's visualize the distribution of conversations that are about climate change.
@@ -95,18 +179,156 @@ conversation_classifications %>%
 We end up with 153 geolocated conversations about climate change. Let's start associating their posts to discourses and map which discourses dominates per region.
 
 ## Discourses
-In a [previous initiative](https://blog.republicofdata.io/enforcing-structure-and-assembling-our-ai-agent-2/), we had developed an AI agent that could associate narratives to posts within a conversation. 
-
-For reference, we are only pasting here the code we used to classify our posts. This is a non-executable cell, as it does require heavy and costly interactions with the OpenAI API. Please refer to that article above for implementation details. 
+We are now using a second agent to classify the conversations into the 4 discourses we talked about earlier.
 
 <details>
-<summary>See code</summary>
+<summary>post_association_agent.py</summary>
 ```python
-  #...
+from typing import List
+
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_openai import ChatOpenAI
+from langsmith import traceable
+
+
+# Define classes for LLM task output
+class PostAssociation(BaseModel):
+    """Association between post and narrative"""
+
+    post_id: str = Field(description="A post's id")
+    text: str = Field(description="A post's text")
+    discourse: str = Field(description="The associated discourse's label")
+
+
+class PostAssociations(BaseModel):
+    """List of associations between posts and narratives"""
+
+    post_associations: List[PostAssociation]
+
+
+# Agent to classify posts to discourses
+@traceable
+def initiate_post_association_agent():
+    # Components
+    model = ChatOpenAI(model="gpt-4o")
+    parser = PydanticOutputParser(pydantic_object=PostAssociations)
+
+    # Prompt
+    system_template = """
+    # IDENTITY and PURPOSE 
+    You are an expert at associating discourse types to social network posts.
+
+    # STEPS
+    1. Ingest the first json object which has all the posts from a social network conversation on climate change.
+    2. Consider the discourse type definitions provided below.
+    3. Take your time to process all those entries.
+    4. Parse all posts and associate the most appropriate discourse type to each individual post.
+    5. It's important that if no discourse is relevant, the post should be classified as N/A.
+    5. Each association should have the post's text and the discourse's label.
+
+    # DISCOURSE TYPES
+    1. Biophysical: "Climate change is an environmental problem caused by rising concentrations of greenhouse gases from human activities. Climate change can be addressed through policies, technologies, and behavioural changes that reduce greehouse gas emissions and support adaptation."
+    2. Critical: "Climate change is a social problem caused by economic, political, and cultureal procsses that contribute to uneven and unsustainable patterns of development and energy usage. Addressing climate change requires challenging economic systems and power structures that perpetuate high levels of fossil fuel consumption."
+    3. Dismissive: "Climate change is not a problem at all or at least not an urgent concern. No action is needed to address climate change, and other issues should be prioritized."
+    4. Integrative: "Climate change is an environmental and social problem that is rooted in particular beliefs and perceptions of human-environment relationships and humanity's place in the world. Addressing climate change requires challenging mindsets, norms, rules, institutions, and policies that support unsustainable resource use and practice."
+    5. N/A: "No discourse is relevant to this post."
+
+    # OUTPUT INSTRUCTIONS
+    {format_instructions}
+    """
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_template),
+            (
+                "human",
+                "Here's a json object which has all the posts from a social network conversation on climate change: {conversation_posts_json}",
+            ),
+        ]
+    ).partial(format_instructions=parser.get_format_instructions())
+
+    # Task
+    chain = prompt_template | model | parser
+    return chain
 ```
 </details>
 
-Let's now load the narratives we classified.
+And here's the code that uses that agent to associate posts to discourses.
+
+<details>
+<summary>associate_posts.py</summary>
+```python
+import json
+
+import pandas as pd
+
+from prototype.post_association_agent import initiate_post_association_agent
+from prototype.utils import get_conversations
+
+conversations_df = get_conversations()
+classifications_df = pd.read_csv("data/conversation_classifications.csv")
+
+# Filter conversations classified as about climate change
+climate_change_conversations_df = conversations_df[
+    conversations_df["conversation_id"].isin(
+        classifications_df[classifications_df["classification"] == True][
+            "conversation_id"
+        ]
+    )
+]
+
+# # Associate posts with a discourse type
+post_associations_df = pd.DataFrame(columns=["post_id", "discourse_type"])
+post_association_agent = initiate_post_association_agent()
+
+# Iterate over all conversations and classify them
+for _, conversation_df in climate_change_conversations_df.iterrows():
+    conversation_dict = conversation_df.to_dict()
+    conversation_json = json.dumps(conversation_dict)
+
+    try:
+        post_associations_output = post_association_agent.invoke(
+            {"conversation_posts_json": conversation_json}
+        )
+
+        for association in post_associations_output.post_associations:
+            new_row = {
+                "post_id": association.post_id,
+                "discourse_type": association.discourse,
+            }
+            post_associations_df = pd.concat(
+                [post_associations_df, pd.DataFrame([new_row])], ignore_index=True
+            )
+    except Exception as e:
+        print(
+            f"Failed to associate posts in conversation {conversation_df['conversation_id']}"
+        )
+        print(e)
+
+# Save classified conversations to a new csv file
+post_associations_df.to_csv("data/post_associations_df.csv", index=False)
+```
+</details>
+
+Let's see the results of that discourse association.
+
+```{r}
+post_associations <- read.csv("../data/post_associations_df.csv")
+
+post_associations %>%
+  head(n=5) %>%
+  kable()
+```
+
+And visualize the distribution of discourses.
+
+```{r}
+post_associations %>%
+  count(discourse_type) %>%
+  kable()
+```
 
 ## Map
 Hex map of which of the 4 discourse types are most prevalent by geography

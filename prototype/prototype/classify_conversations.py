@@ -2,7 +2,9 @@ import json
 
 import pandas as pd
 
-from prototype.agents import initiate_conversation_classification_agent
+from prototype.conversation_classification_agent import (
+    initiate_conversation_classification_agent,
+)
 from prototype.utils import get_conversations
 
 conversations_df = get_conversations()

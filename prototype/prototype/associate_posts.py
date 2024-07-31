@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 
-from prototype.agents import initiate_post_association_agent
+from prototype.post_association_agent import initiate_post_association_agent
 from prototype.utils import get_conversations
 
 conversations_df = get_conversations()
