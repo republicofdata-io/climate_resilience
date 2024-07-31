@@ -13,3 +13,4 @@
 __pycache__
 *.html
 *_files
+*.knit.md
