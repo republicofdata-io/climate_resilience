@@ -29,7 +29,7 @@ We will be referring to the [Climate and Society](https://www.amazon.com/Climate
 In this book, the authors propose a framework to understand the different discourses on climate change. They identify 4 main discourses:
 
 1. **Biophysical**: "Climate change is an environmental problem caused by rising concentrations of greenhouse gases from human activities. Climate change can be addressed through policies, technologies, and behavioural changes that reduce greehouse gas emissions and support adaptation."
-2. **Critical**: "Climate change is a social problem caused by economic, political, and cultureal procsses that contribute to uneven and unsustainable patterns of development and energy usage. Addressing climate change requires challenging economic systems and power structures that perpetuate high levels of fossil fuel consumption."
+2. **Critical**: "Climate change is a social problem caused by economic, political, and cultural processes that contribute to uneven and unsustainable patterns of development and energy usage. Addressing climate change requires challenging economic systems and power structures that perpetuate high levels of fossil fuel consumption."
 3. **Dismissive**: "Climate change is not a problem at all or at least not an urgent concern. No action is needed to address climate change, and other issues should be prioritized."
 4. **Integrative**: "Climate change is an environmental and social problem that is rooted in particular beliefs and perceptions of human-environment relationships and humanity's place in the world. Addressing climate change requires challenging mindsets, norms, rules, institutions, and policies that support unsustainable resource use and practice."
 
@@ -52,6 +52,7 @@ library(reticulate)
 library(dplyr)
 library(ggplot2)
 library(knitr)
+library(tidyr)
 
 virtualenv_path <- system("poetry env info --path", intern = TRUE)
 use_virtualenv(virtualenv_path, required = TRUE)
@@ -157,6 +158,12 @@ conversation_classifications_df.to_csv(
 )
 ```
 </details>
+
+::: {.callout-note}
+You may have noticed that our agent definition uses a `traceable` decorator. This is a feature of the Langchain framework that allows us to trace the execution of the agent and store the logs for auditing purposes.
+
+![Langsmith traces](images/langsmith_traces.png)
+:::
 
 Let's see the results of that classification.
 
@@ -330,5 +337,78 @@ post_associations %>%
   kable()
 ```
 
-## Map
-Hex map of which of the 4 discourse types are most prevalent by geography
+## Geographical Distribution
+Now that we have the cleaned up, relevant conversations and their associated discourses, let's pull it all together.
+
+```{r}
+full_posts <- conversations_df %>%
+  inner_join(conversation_classifications, by = "conversation_id") %>%
+  inner_join(post_associations, by = "post_id") %>%
+  filter(classification == "True") %>%
+  filter(tolower(discourse_type) != "n/a") %>%
+  filter(admin1_name != "")
+
+full_posts %>%
+  head(n=1) %>%
+  kable()
+```
+
+And now let's see the distribution of discourses by geography, with the most frequent discourse type per state.
+
+```{r}
+discourses_geo_summary <- full_posts %>%
+  count(discourse_type, admin1_name) %>%
+  pivot_wider(names_from = discourse_type, values_from = n, values_fill = list(n = 0)) %>%
+  rowwise() %>%
+  mutate(most_frequent_discourse = names(.)[which.max(c_across(-admin1_name)) + 1]) %>%
+  ungroup()
+
+discourses_geo_summary %>%
+  kable()
+```
+
+Finally, let's visualize the most frequent discourse type per U.S. state.
+
+```{r}
+library(ggplot2)
+library(sf)
+library(dplyr)
+library(usmap)
+
+# Load the U.S. map
+us_states <- usmap::us_map(regions = "states")
+
+# Convert the us_states to an sf object
+us_states_sf <- st_as_sf(us_states, coords = c("x", "y"), crs = 4326, agr = "constant")
+
+# Join the data
+discourses_geo_summary_sf <- discourses_geo_summary %>%
+  left_join(us_states_sf, by = c("admin1_name" = "full"))
+
+# Convert to an sf object, ensuring 'geom' is recognized as the geometry column
+discourses_geo_summary_sf <- st_as_sf(discourses_geo_summary_sf, sf_column_name = "geom")
+
+# Plot the map
+ggplot(discourses_geo_summary_sf) +
+  geom_sf(aes(geometry = geom, fill = most_frequent_discourse), color = "black") +
+  scale_fill_manual(values = c(
+    "Biophysical" = "blue",
+    "Critical" = "red",
+    "Dismissive" = "green",
+    "Integrative" = "purple"
+  )) +
+  theme_minimal() +
+  labs(title = "Most Frequent Discourse Type per U.S. State")
+```
+
+## Next Steps
+This prototype shows how we can leverage the data we collected to understand climate discourses by geography. But we're not done yet.
+
+In a next iteration, we will:
+- Restart of data collection platform.
+- Increase the number of social network platforms we collect data from.
+- Increase the number of media sources that helps us capture climate conversations.
+- Improve the AI agents to better classify the discourses.
+- Develop a proper interactive data app to visualize the discourses and underlying narratives by geography. But also by time, to see how the discourses evolve.
+
+For now though, I'm taking a few weeks off. So see you in September!
