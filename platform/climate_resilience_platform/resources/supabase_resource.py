@@ -10,7 +10,7 @@ class SupabaseResource:
         response = (
             self.supabase.table("media_feeds")
             .select("*")
-            .eq("is_enabled", True)
+            .eq("is_enabled", "TRUE")
             .execute()
         )
         response_df = pd.DataFrame(response.data)
