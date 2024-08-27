@@ -30,6 +30,7 @@ def build_media_feed_assets(name: str, slug: str, rss_feed: str) -> AssetsDefini
     @asset(
         name=f"{slug}_media_feed",
         description=f"Media feed for {name}",
+        io_manager_key="bigquery_io_manager",
         compute_kind="python",
     )
     def _asset():
