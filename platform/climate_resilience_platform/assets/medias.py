@@ -1,9 +1,11 @@
 import os
+from datetime import datetime
 
 import feedparser
 import pandas as pd
 from dagster import AssetExecutionContext, AssetsDefinition, Output, asset
 
+from ..partitions import hourly_partition_def
 from ..resources import SupabaseResource
 
 media_article_columns = {
@@ -33,10 +35,16 @@ def build_media_feed_assets(
         name=f"{slug}_media_feed",
         description=f"Media feed for {name}",
         io_manager_key="bigquery_io_manager",
+        partitions_def=hourly_partition_def,
         output_required=False,
         compute_kind="python",
+        metadata={"partition_expr": "published_ts"},
     )
     def _asset(context: AssetExecutionContext):
+        # Get partition's time
+        partition_time_str = context.asset_partition_key_for_output()
+        partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
         # Parse the RSS feed
         feed = feedparser.parse(rss_feed)
 
@@ -78,6 +86,12 @@ def build_media_feed_assets(
                 articles_df["published_ts"], format="%a, %d %b %Y %H:%M:%S %z"
             ).dt.tz_localize(None)
             articles_df = articles_df.astype(media_article_columns)
+
+            # Keep articles that are within the partition's time
+            articles_df = articles_df[
+                (articles_df["published_ts"] >= partition_time)
+                & (articles_df["published_ts"] < partition_time + pd.Timedelta(hours=1))
+            ]
 
             # Return asset
             yield Output(
