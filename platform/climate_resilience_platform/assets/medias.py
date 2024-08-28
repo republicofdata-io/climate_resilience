@@ -9,6 +9,7 @@ from ..partitions import hourly_partition_def
 from ..resources import SupabaseResource
 
 media_article_columns = {
+    "media": "string",
     "id": "string",
     "title": "string",
     "link": "string",
@@ -18,7 +19,6 @@ media_article_columns = {
     "medias": "string",
     "published_ts": "datetime64[ns]",
 }
-
 
 # Get media feeds
 supabase_resource = SupabaseResource(
@@ -32,13 +32,14 @@ def build_media_feed_assets(
     name: str, slug: str, rss_feed: str, categories: str
 ) -> AssetsDefinition:
     @asset(
-        name=f"{slug}_media_feed",
+        name=f"{slug}_articles",
+        key_prefix=["medias"],
         description=f"Media feed for {name}",
         io_manager_key="bigquery_io_manager",
         partitions_def=hourly_partition_def,
+        metadata={"partition_expr": "published_ts"},
         output_required=False,
         compute_kind="python",
-        metadata={"partition_expr": "published_ts"},
     )
     def _asset(context: AssetExecutionContext):
         # Get partition's time
@@ -64,6 +65,7 @@ def build_media_feed_assets(
             # If categories is None or the article matches the categories, include it
             articles.append(
                 {
+                    "media": slug,
                     "id": entry.id,
                     "title": entry.title,
                     "link": entry.link,

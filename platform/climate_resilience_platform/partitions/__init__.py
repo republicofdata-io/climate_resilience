@@ -1,8 +1,6 @@
-from dagster import HourlyPartitionsDefinition
-
-from datetime import datetime
 from datetime import datetime, timedelta
 
+from dagster import HourlyPartitionsDefinition
 
 # Hourly partition
 hourly_partition_def = HourlyPartitionsDefinition(
