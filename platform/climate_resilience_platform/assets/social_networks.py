@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 
 import pandas as pd
@@ -6,12 +7,14 @@ from dagster import (
     AssetExecutionContext,
     AssetIn,
     AssetKey,
+    Output,
     TimeWindowPartitionMapping,
     asset,
 )
 
 from ..partitions import hourly_partition_def
-from ..resources import SupabaseResource
+from ..resources.supabase_resource import SupabaseResource
+from ..resources.x_resource import XResource, XResourceException
 
 media_article_columns = {
     "media": "string",
@@ -67,7 +70,7 @@ asset_ins = {
     output_required=False,
     compute_kind="python",
 )
-def x_conversations(context: AssetExecutionContext, **kwargs) -> None:
+def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwargs):
     # Get partition's time
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
@@ -92,6 +95,69 @@ def x_conversations(context: AssetExecutionContext, **kwargs) -> None:
 
     # Create an empty DataFrame that will hold all conversations
     conversations_df = pd.DataFrame()
-    conversations_df = articles_df.reindex(columns=list(post_columns.keys()))
+    conversations_df = conversations_df.reindex(columns=list(post_columns.keys()))
 
-    return None
+    # Iterate over the articles and search for tweets that mention the article
+    failure_count = 0
+    index = 0
+
+    while index < len(articles_df):
+        row = articles_df.iloc[index]
+        try:
+            search_term = f'url:"{row["link"]}" -RT -is:retweet -is:reply lang:en'
+
+            # Get posts that mention the article and log consumption to table
+            x_posts = x_resource.search(
+                search_term,
+                n_results=10,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            # Add article URL to the DataFrame
+            x_posts["article_url"] = row["link"]
+
+            # Remove timezone information from timestamp
+            x_posts["tweet_created_at"] = pd.to_datetime(
+                x_posts["tweet_created_at"]
+            ).dt.tz_localize(None)
+            x_posts["author_created_at"] = pd.to_datetime(
+                x_posts["author_created_at"]
+            ).dt.tz_localize(None)
+
+            # Add partition_hour_utc_ts and current timestamp as new fields to the DataFrame
+            x_posts["partition_hour_utc_ts"] = partition_time.strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
+            x_posts["record_loading_ts"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+            # Concatenate the new x_posts to the DataFrame
+            conversations_df = pd.concat(
+                [conversations_df, x_posts.astype(post_columns)]
+            )
+
+            # Reset failure count on success
+            failure_count = 0
+            index += 1
+        except XResourceException as e:
+            if e.status_code == 429:
+                # Increment failure count and sleep
+                failure_count += 1
+                sleep_time = 2**failure_count
+
+                if sleep_time > 900:
+                    # Break out of the loop if the sleep time exceeds 900 seconds
+                    break
+
+                time.sleep(sleep_time)
+            else:
+                # If it's a different exception, raise it
+                raise e
+
+    # Return asset
+    yield Output(
+        value=conversations_df,
+        metadata={
+            "num_rows": conversations_df.shape[0],
+        },
+    )
