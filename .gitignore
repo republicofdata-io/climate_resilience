@@ -5,6 +5,8 @@
 
 # Local dev
 .DS_Store
+.dagster
+TODO.md
 
 # Build
 __pycache__

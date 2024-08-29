@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "climate-resilience-platform"
+version = "0.1.0"
+description = ""
+authors = ["Olivier Dupuis <olivier@republicofdata.io>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+dagster = "^1.8.2"
+supabase = "^2.7.3"
+pandas = "^2.2.2"
+dagster-webserver = "^1.8.2"
+feedparser = "^6.0.11"
+dagster-gcp = "^0.24.2"
+dagster-gcp-pandas = "^0.24.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
