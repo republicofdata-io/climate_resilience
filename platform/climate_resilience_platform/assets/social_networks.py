@@ -30,12 +30,12 @@ media_article_columns = {
 
 post_columns = {
     "article_url": "string",
-    "tweet_id": "int64",
+    "tweet_id": "string",
     "tweet_created_at": "datetime64[ns]",
-    "tweet_conversation_id": "int64",
+    "tweet_conversation_id": "string",
     "tweet_text": "string",
     "tweet_public_metrics": "string",
-    "author_id": "int64",
+    "author_id": "string",
     "author_username": "string",
     "author_location": "string",
     "author_description": "string",
@@ -84,6 +84,7 @@ def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwa
     # Create an empty DataFrame that will hold all upstream articles
     articles_df = pd.DataFrame()
     articles_df = articles_df.reindex(columns=list(media_article_columns.keys()))
+    articles_df = articles_df.astype(media_article_columns)
 
     # Iterate over kwargs and combine into a single dataframe of all articles
     for asset_key, asset_df in kwargs.items():
@@ -96,6 +97,7 @@ def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwa
     # Create an empty DataFrame that will hold all conversations
     conversations_df = pd.DataFrame()
     conversations_df = conversations_df.reindex(columns=list(post_columns.keys()))
+    conversations_df = conversations_df.astype(post_columns)
 
     # Iterate over the articles and search for tweets that mention the article
     failure_count = 0
@@ -159,5 +161,117 @@ def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwa
         value=conversations_df,
         metadata={
             "num_rows": conversations_df.shape[0],
+        },
+    )
+
+
+@asset(
+    name="x_conversation_posts",
+    key_prefix=["social_networks"],
+    description="Posts within X conversations",
+    io_manager_key="bigquery_io_manager",
+    ins={
+        "x_conversations": AssetIn(
+            key=["social_networks", "x_conversations"],
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-24),
+        )
+    },
+    partitions_def=hourly_partition_def,
+    metadata={"partition_expr": "partition_hour_utc_ts"},
+    compute_kind="python",
+)
+def x_conversation_posts(
+    context,
+    x_conversations,
+    x_resource: XResource,
+):
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    # Calculate start and end times for the scraping of the social network
+    start_time = partition_time.isoformat(timespec="seconds") + "Z"
+    end_time = (partition_time + pd.Timedelta(hours=1)).isoformat(
+        timespec="seconds"
+    ) + "Z"
+
+    # Create an empty DataFrame with the specified columns and data types
+    conversation_posts_df = pd.DataFrame()
+    conversation_posts_df = conversation_posts_df.reindex(
+        columns=list(post_columns.keys())
+    )
+    conversation_posts_df = conversation_posts_df.astype(post_columns)
+
+    # Deduplicate the x_conversations DataFrame
+    x_conversations = x_conversations.drop_duplicates(subset=["tweet_conversation_id"])
+    context.log.info(f"Getting posts for {len(x_conversations)} conversations.")
+
+    # Iterate over the x_conversations and search for replies to the conversation
+    failure_count = 0
+    index = 0
+
+    while index < len(x_conversations):
+        row = x_conversations.iloc[index]
+        try:
+            search_term = f'conversation_id:{row["tweet_conversation_id"]} -RT -is:retweet lang:en'
+
+            # Get posts that are replies to the conversation and log consumption to table
+            social_network_x_conversation_posts = x_resource.search(
+                search_term,
+                n_results=10,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            # Add article URL to the DataFrame
+            social_network_x_conversation_posts["article_url"] = row["article_url"]
+
+            # Remove timezone information from timestamp
+            social_network_x_conversation_posts["tweet_created_at"] = pd.to_datetime(
+                social_network_x_conversation_posts["tweet_created_at"]
+            ).dt.tz_localize(None)
+            social_network_x_conversation_posts["author_created_at"] = pd.to_datetime(
+                social_network_x_conversation_posts["author_created_at"]
+            ).dt.tz_localize(None)
+
+            # Add partition_hour_utc_ts and current timestamp as new fields to the DataFrame
+            social_network_x_conversation_posts["partition_hour_utc_ts"] = (
+                partition_time.strftime("%Y-%m-%dT%H:%M:%S")
+            )
+            social_network_x_conversation_posts["record_loading_ts"] = (
+                datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            )
+
+            # Concatenate the new social_network_x_conversation_posts to the DataFrame
+            conversation_posts_df = pd.concat(
+                [
+                    conversation_posts_df,
+                    social_network_x_conversation_posts.astype(post_columns),
+                ]
+            )
+
+            # Reset failure count on success
+            failure_count = 0
+            index += 1
+        except XResourceException as e:
+            if e.status_code == 429:
+                # Increment failure count and sleep
+                failure_count += 1
+                sleep_time = 2**failure_count
+
+                if sleep_time > 900:
+                    # Break out of the loop if the sleep time exceeds 900 seconds
+                    break
+
+                time.sleep(sleep_time)
+            else:
+                # If it's a different exception, raise it
+                raise e
+
+    # Return asset
+    yield Output(
+        value=conversation_posts_df,
+        metadata={
+            "num_rows": conversation_posts_df.shape[0],
         },
     )

@@ -5,7 +5,7 @@ import os
 from dagster import Definitions
 
 from .assets.medias import media_feed_assets
-from .assets.social_networks import x_conversations
+from .assets.social_networks import x_conversation_posts, x_conversations
 from .io_managers import bigquery_io_manager
 from .jobs import refresh_media_feeds_job
 from .resources import supabase_resource, x_resource
@@ -20,7 +20,7 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = AUTH_FILE
 
 
 defs = Definitions(
-    assets=[*media_feed_assets, x_conversations],
+    assets=[*media_feed_assets, x_conversations, x_conversation_posts],
     jobs=[refresh_media_feeds_job],
     schedules=[refresh_media_feeds_schedule],
     resources={
