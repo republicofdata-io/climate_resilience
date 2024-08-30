@@ -2,5 +2,3 @@ locations:
   - location_name: climate-resilience
     code_source:
       package_name: climate_resilience_platform
-    build:
-      directory: ./platform
