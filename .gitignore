@@ -6,6 +6,7 @@
 # Local dev
 .DS_Store
 .dagster
+pyproject.toml
 TODO.md
 
 # Build
