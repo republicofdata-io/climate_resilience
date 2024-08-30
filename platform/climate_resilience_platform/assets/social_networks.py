@@ -1,277 +1,163 @@
 import os
-import time
 from datetime import datetime
 
 import pandas as pd
-from dagster import (
-    AssetExecutionContext,
-    AssetIn,
-    AssetKey,
-    Output,
-    TimeWindowPartitionMapping,
-    asset,
-)
+import requests
+import spacy
+from dagster import AssetCheckResult, AssetCheckSpec, AssetIn, Output, asset
 
 from ..partitions import hourly_partition_def
-from ..resources.supabase_resource import SupabaseResource
-from ..resources.x_resource import XResource, XResourceException
 
-media_article_columns = {
-    "media": "string",
-    "id": "string",
-    "title": "string",
-    "link": "string",
-    "summary": "string",
-    "author": "string",
-    "tags": "string",
-    "medias": "string",
-    "published_ts": "datetime64[ns]",
-}
+spacy.cli.download("en_core_web_sm")
 
-post_columns = {
-    "article_url": "string",
-    "tweet_id": "string",
-    "tweet_created_at": "datetime64[ns]",
-    "tweet_conversation_id": "string",
-    "tweet_text": "string",
-    "tweet_public_metrics": "string",
-    "author_id": "string",
-    "author_username": "string",
-    "author_location": "string",
-    "author_description": "string",
-    "author_created_at": "datetime64[ns]",
-    "author_public_metrics": "string",
-    "partition_hour_utc_ts": "datetime64[ns]",
-    "record_loading_ts": "datetime64[ns]",
-}
 
-# Get media feeds
-supabase_resource = SupabaseResource(
-    url=os.environ["SUPABASE_URL"], key=os.environ["SUPABASE_KEY"]
-)
-media_feeds = supabase_resource.get_media_feeds()
-asset_ins = {
-    f"{media_feed['slug']}_articles": AssetIn(
-        AssetKey(["medias", str(media_feed["slug"]) + "_articles"]),
-        partition_mapping=TimeWindowPartitionMapping(start_offset=-24),
+# Geocode locations using GeoNames
+def geocode(location):
+    spacy_username = os.getenv("SPACY_USERNAME")
+    url = f"http://api.geonames.org/searchJSON?q={location}&maxRows=1&username={spacy_username}"
+    response = requests.get(url)
+    return response.json()["geonames"][0]
+
+
+# Calculate the number of decimal places in a coordinate.
+def calculate_precision(coord):
+    if pd.isna(coord) or coord == "":
+        return 0
+    # Split the coordinate on the decimal point and return the length of the fractional part
+    return len(coord.split(".")[1]) if "." in coord else 0
+
+
+# Calculate the precision for latitude and longitude
+def most_precise_location(group):
+    group["latitude_precision"] = group["latitude"].apply(calculate_precision)
+    group["longitude_precision"] = group["longitude"].apply(calculate_precision)
+
+    # Sum the precision of latitude and longitude to get a total precision score
+    group["total_precision"] = (
+        group["latitude_precision"] + group["longitude_precision"]
     )
-    for _, media_feed in media_feeds.iterrows()
-}
 
+    # Sort the group by total precision in descending order and return the first row
+    most_precise = group.sort_values("total_precision", ascending=False).iloc[0]
 
-@asset(
-    name="x_conversations",
-    key_prefix=["social_networks"],
-    description="X conversations that mention this partition's article",
-    io_manager_key="bigquery_io_manager",
-    ins=asset_ins,
-    partitions_def=hourly_partition_def,
-    metadata={"partition_expr": "partition_hour_utc_ts"},
-    output_required=False,
-    compute_kind="python",
-)
-def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwargs):
-    # Get partition's time
-    partition_time_str = context.partition_key
-    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
-
-    # Calculate start and end times for the scraping of the social network
-    start_time = partition_time.isoformat(timespec="seconds") + "Z"
-    end_time = (partition_time + pd.Timedelta(hours=1)).isoformat(
-        timespec="seconds"
-    ) + "Z"
-
-    # Create an empty DataFrame that will hold all upstream articles
-    articles_df = pd.DataFrame()
-    articles_df = articles_df.reindex(columns=list(media_article_columns.keys()))
-    articles_df = articles_df.astype(media_article_columns)
-
-    # Iterate over kwargs and combine into a single dataframe of all articles
-    for asset_key, asset_df in kwargs.items():
-        articles_df = pd.concat([articles_df, asset_df])
-
-    # Deduplicate the articles DataFrame
-    articles_df = articles_df.drop_duplicates(subset=["link"])
-    context.log.info(f"Scraping conversations for {len(articles_df)} articles.")
-
-    # Create an empty DataFrame that will hold all conversations
-    conversations_df = pd.DataFrame()
-    conversations_df = conversations_df.reindex(columns=list(post_columns.keys()))
-    conversations_df = conversations_df.astype(post_columns)
-
-    # Iterate over the articles and search for tweets that mention the article
-    failure_count = 0
-    index = 0
-
-    while index < len(articles_df):
-        row = articles_df.iloc[index]
-        try:
-            search_term = f'url:"{row["link"]}" -RT -is:retweet -is:reply lang:en'
-
-            # Get posts that mention the article and log consumption to table
-            x_posts = x_resource.search(
-                search_term,
-                n_results=10,
-                start_time=start_time,
-                end_time=end_time,
-            )
-
-            # Add article URL to the DataFrame
-            x_posts["article_url"] = row["link"]
-
-            # Remove timezone information from timestamp
-            x_posts["tweet_created_at"] = pd.to_datetime(
-                x_posts["tweet_created_at"]
-            ).dt.tz_localize(None)
-            x_posts["author_created_at"] = pd.to_datetime(
-                x_posts["author_created_at"]
-            ).dt.tz_localize(None)
-
-            # Add partition_hour_utc_ts and current timestamp as new fields to the DataFrame
-            x_posts["partition_hour_utc_ts"] = partition_time.strftime(
-                "%Y-%m-%dT%H:%M:%S"
-            )
-            x_posts["record_loading_ts"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-            # Concatenate the new x_posts to the DataFrame
-            conversations_df = pd.concat(
-                [conversations_df, x_posts.astype(post_columns)]
-            )
-
-            # Reset failure count on success
-            failure_count = 0
-            index += 1
-        except XResourceException as e:
-            if e.status_code == 429:
-                # Increment failure count and sleep
-                failure_count += 1
-                sleep_time = 2**failure_count
-
-                if sleep_time > 900:
-                    # Break out of the loop if the sleep time exceeds 900 seconds
-                    break
-
-                time.sleep(sleep_time)
-            else:
-                # If it's a different exception, raise it
-                raise e
-
-    # Return asset
-    yield Output(
-        value=conversations_df,
-        metadata={
-            "num_rows": conversations_df.shape[0],
-        },
+    # Drop the temporary precision columns before returning
+    return most_precise.drop(
+        ["latitude_precision", "longitude_precision", "total_precision"]
     )
 
 
 @asset(
-    name="x_conversation_posts",
+    name="social_network_user_profile_geolocations",
     key_prefix=["social_networks"],
-    description="Posts within X conversations",
+    description="Geolocation of social network user's profile location",
     io_manager_key="bigquery_io_manager",
     ins={
-        "x_conversations": AssetIn(
+        "social_network_x_conversations": AssetIn(
             key=["social_networks", "x_conversations"],
-            partition_mapping=TimeWindowPartitionMapping(start_offset=-24),
-        )
+        ),
+        "social_network_x_conversation_posts": AssetIn(
+            key=["social_networks", "x_conversation_posts"],
+        ),
     },
     partitions_def=hourly_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
     compute_kind="python",
 )
-def x_conversation_posts(
-    context,
-    x_conversations,
-    x_resource: XResource,
+def social_network_user_profile_geolocations(
+    context, social_network_x_conversations, social_network_x_conversation_posts
 ):
+    social_network_user_geolocations_columns = {
+        "social_network_profile_id": "string",
+        "social_network_profile_username": "string",
+        "location_order": "int64",
+        "location": "string",
+        "countryName": "string",
+        "countryCode": "string",
+        "adminName1": "string",
+        "adminCode1": "string",
+        "latitude": "string",
+        "longitude": "string",
+        "geolocation_ts": "datetime64[ns]",
+    }
     # Get partition's time
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
-    # Calculate start and end times for the scraping of the social network
-    start_time = partition_time.isoformat(timespec="seconds") + "Z"
-    end_time = (partition_time + pd.Timedelta(hours=1)).isoformat(
-        timespec="seconds"
-    ) + "Z"
-
-    # Create an empty DataFrame with the specified columns and data types
-    conversation_posts_df = pd.DataFrame()
-    conversation_posts_df = conversation_posts_df.reindex(
-        columns=list(post_columns.keys())
+    # Initialize DataFrame that will hold geolocation data of social network user's profile location
+    social_network_user_profile_geolocations_df = (
+        pd.DataFrame()
+        .reindex(columns=social_network_user_geolocations_columns.keys())
+        .astype(social_network_user_geolocations_columns)
     )
-    conversation_posts_df = conversation_posts_df.astype(post_columns)
 
-    # Deduplicate the x_conversations DataFrame
-    x_conversations = x_conversations.drop_duplicates(subset=["tweet_conversation_id"])
-    context.log.info(f"Getting posts for {len(x_conversations)} conversations.")
+    # Concatenate the social network posts
+    social_network_posts = pd.concat(
+        [social_network_x_conversations, social_network_x_conversation_posts],
+        ignore_index=True,
+    )
 
-    # Iterate over the x_conversations and search for replies to the conversation
-    failure_count = 0
-    index = 0
+    # Drop duplicates
+    social_network_posts = social_network_posts.drop_duplicates(
+        subset=["author_id"], keep="first"
+    )
+    context.log.info(f"Geolocating {len(social_network_posts)} social network users.")
 
-    while index < len(x_conversations):
-        row = x_conversations.iloc[index]
+    # Load spaCy's NER model
+    nlp = spacy.load("en_core_web_sm")
+
+    for _, row in social_network_posts.iterrows():
         try:
-            search_term = f'conversation_id:{row["tweet_conversation_id"]} -RT -is:retweet lang:en'
+            # Extract location entities
+            doc = nlp(str(row["author_location"]))
+            locations = [ent.text for ent in doc.ents if ent.label_ == "GPE"]
 
-            # Get posts that are replies to the conversation and log consumption to table
-            social_network_x_conversation_posts = x_resource.search(
-                search_term,
-                n_results=10,
-                start_time=start_time,
-                end_time=end_time,
-            )
+            for location in locations:
+                geocoded_location_data = geocode(location)
 
-            # Add article URL to the DataFrame
-            social_network_x_conversation_posts["article_url"] = row["article_url"]
+                data = {
+                    "social_network_profile_id": [row["author_id"]],
+                    "social_network_profile_username": [row["author_username"]],
+                    "location_order": [locations.index(location)],
+                    "location": [location],
+                    "countryName": [geocoded_location_data.get("countryName", "")],
+                    "countryCode": [geocoded_location_data.get("countryCode", "")],
+                    "adminName1": [geocoded_location_data.get("adminName1", "")],
+                    "adminCode1": [geocoded_location_data.get("adminCode1", "")],
+                    "latitude": [geocoded_location_data.get("lat", "")],
+                    "longitude": [geocoded_location_data.get("lng", "")],
+                    "geolocation_ts": [datetime.now()],
+                }
+                geolocations_df = pd.DataFrame(data).astype(
+                    social_network_user_geolocations_columns
+                )
 
-            # Remove timezone information from timestamp
-            social_network_x_conversation_posts["tweet_created_at"] = pd.to_datetime(
-                social_network_x_conversation_posts["tweet_created_at"]
-            ).dt.tz_localize(None)
-            social_network_x_conversation_posts["author_created_at"] = pd.to_datetime(
-                social_network_x_conversation_posts["author_created_at"]
-            ).dt.tz_localize(None)
+                # Concatenate the DataFrames
+                social_network_user_profile_geolocations_df = pd.concat(
+                    [social_network_user_profile_geolocations_df, geolocations_df],
+                    ignore_index=True,
+                )
 
-            # Add partition_hour_utc_ts and current timestamp as new fields to the DataFrame
-            social_network_x_conversation_posts["partition_hour_utc_ts"] = (
-                partition_time.strftime("%Y-%m-%dT%H:%M:%S")
-            )
-            social_network_x_conversation_posts["record_loading_ts"] = (
-                datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-            )
+        except Exception as e:
+            print(f"Error geolocating {row['article_url']}: {e}")
 
-            # Concatenate the new social_network_x_conversation_posts to the DataFrame
-            conversation_posts_df = pd.concat(
-                [
-                    conversation_posts_df,
-                    social_network_x_conversation_posts.astype(post_columns),
-                ]
-            )
+    # Add partition_hour_utc_ts as a new field to the DataFrame
+    social_network_user_profile_geolocations_df["partition_hour_utc_ts"] = (
+        partition_time
+    )
 
-            # Reset failure count on success
-            failure_count = 0
-            index += 1
-        except XResourceException as e:
-            if e.status_code == 429:
-                # Increment failure count and sleep
-                failure_count += 1
-                sleep_time = 2**failure_count
-
-                if sleep_time > 900:
-                    # Break out of the loop if the sleep time exceeds 900 seconds
-                    break
-
-                time.sleep(sleep_time)
-            else:
-                # If it's a different exception, raise it
-                raise e
+    # Deduplicate the DataFrame by social_network_profile_id and by keeping the hightest level of precision
+    social_network_user_profile_geolocations_df = (
+        social_network_user_profile_geolocations_df.groupby(
+            "social_network_profile_id", as_index=False
+        )
+        .apply(most_precise_location)
+        .reset_index(drop=True)
+    )
 
     # Return asset
     yield Output(
-        value=conversation_posts_df,
+        value=social_network_user_profile_geolocations_df,
         metadata={
-            "num_rows": conversation_posts_df.shape[0],
+            "num_rows": social_network_user_profile_geolocations_df.shape[0],
         },
     )
