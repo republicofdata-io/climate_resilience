@@ -10,6 +10,7 @@ if __name__ == "__main__":
             "dagster-gcp==0.24.2",
             "dagster-gcp-pandas==0.24.2",
             "feedparser==6.0.11",
+            "spacy==3.7.5",
             "supabase==2.5.3",
         ],
     )

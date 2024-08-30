@@ -4,8 +4,7 @@ import os
 
 from dagster import Definitions
 
-from .assets.medias import media_feed_assets
-from .assets.social_networks import x_conversation_posts, x_conversations
+from .assets import medias, social_networks, x
 from .io_managers import bigquery_io_manager
 from .jobs import (
     refresh_media_feeds_job,
@@ -28,7 +27,12 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = AUTH_FILE
 
 
 defs = Definitions(
-    assets=[*media_feed_assets, x_conversations, x_conversation_posts],
+    assets=[
+        *medias.media_feed_assets,
+        x.x_conversations,
+        x.x_conversation_posts,
+        social_networks.social_network_user_profile_geolocations,
+    ],
     jobs=[
         refresh_media_feeds_job,
         refresh_social_network_conversations_job,
