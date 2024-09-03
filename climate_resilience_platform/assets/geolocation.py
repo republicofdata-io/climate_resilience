@@ -4,7 +4,7 @@ from datetime import datetime
 import pandas as pd
 import requests
 import spacy
-from dagster import AssetCheckResult, AssetCheckSpec, AssetIn, Output, asset
+from dagster import AssetIn, Output, asset
 
 from ..partitions import three_hour_partition_def
 
