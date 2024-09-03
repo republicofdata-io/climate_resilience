@@ -48,7 +48,7 @@ def most_precise_location(group):
 
 @asset(
     name="social_network_user_profile_geolocations",
-    key_prefix=["social_networks"],
+    key_prefix=["enrichments"],
     description="Geolocation of social network user's profile location",
     io_manager_key="bigquery_io_manager",
     ins={
