@@ -6,7 +6,7 @@ import requests
 import spacy
 from dagster import AssetCheckResult, AssetCheckSpec, AssetIn, Output, asset
 
-from ..partitions import hourly_partition_def
+from ..partitions import three_hour_partition_def
 
 spacy.cli.download("en_core_web_sm")
 
@@ -59,7 +59,7 @@ def most_precise_location(group):
             key=["social_networks", "x_conversation_posts"],
         ),
     },
-    partitions_def=hourly_partition_def,
+    partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
     compute_kind="python",
 )

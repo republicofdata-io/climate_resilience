@@ -17,5 +17,4 @@ refresh_social_network_conversations_schedule = build_schedule_from_partitioned_
 
 refresh_social_network_posts_schedule = build_schedule_from_partitioned_job(
     refresh_social_network_posts_job,
-    minute_of_hour=45,
 )

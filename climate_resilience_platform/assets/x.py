@@ -1,3 +1,4 @@
+import ast
 import os
 import time
 from datetime import datetime
@@ -12,7 +13,7 @@ from dagster import (
     asset,
 )
 
-from ..partitions import hourly_partition_def
+from ..partitions import hourly_partition_def, three_hour_partition_def
 from ..resources.supabase_resource import SupabaseResource
 from ..resources.x_resource import XResource, XResourceException
 
@@ -176,7 +177,7 @@ def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwa
             partition_mapping=TimeWindowPartitionMapping(start_offset=-24),
         )
     },
-    partitions_def=hourly_partition_def,
+    partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
     compute_kind="python",
 )
@@ -204,19 +205,85 @@ def x_conversation_posts(
 
     # Deduplicate the x_conversations DataFrame
     x_conversations = x_conversations.drop_duplicates(subset=["tweet_conversation_id"])
-    context.log.info(f"Getting posts for {len(x_conversations)} conversations.")
+    context.log.info(f"Checking metrics for {len(x_conversations)} conversations.")
+
+    # Get latest metrics for the conversations Create an empty DataFrame with the specified columns and data types
+    conversation_metrics_df = pd.DataFrame()
+    conversation_metrics_df = conversation_metrics_df.reindex(
+        columns=list(post_columns.keys())
+    )
+    conversation_metrics_df = conversation_metrics_df.astype(post_columns)
+
+    # Batch requests in groups of 100
+    for i in range(0, len(x_conversations), 100):
+        batch = x_conversations.iloc[i : i + 100]
+        tweet_ids = ",".join(batch["tweet_id"].astype(str))
+
+        # Iterate over the conversations and get the latest metrics
+        failure_count = 0
+        index = 0
+        batch__x_conversation_metrics = None
+        try:
+            batch__x_conversation_metrics = x_resource.get_tweets(tweet_ids)
+
+            # Reset failure count on success
+            failure_count = 0
+            index += 1
+        except XResourceException as e:
+            if e.status_code == 429:
+                # Increment failure count and sleep
+                failure_count += 1
+                sleep_time = 2**failure_count
+
+                if sleep_time > 900:
+                    # Break out of the loop if the sleep time exceeds 900 seconds
+                    break
+
+                time.sleep(sleep_time)
+            else:
+                # If it's a different exception, raise it
+                raise e
+
+        # Convert 'tweet_conversation_id'
+        if batch__x_conversation_metrics is not None:
+            batch__x_conversation_metrics["tweet_conversation_id"] = (
+                batch__x_conversation_metrics["tweet_conversation_id"].astype(str)
+            )
+            batch["tweet_conversation_id"] = batch["tweet_conversation_id"].astype(str)
+
+            # Concatenate the batch to the full dataframe of conversation metrics
+            conversation_metrics_df = pd.concat(
+                [
+                    conversation_metrics_df,
+                    batch__x_conversation_metrics,
+                ]
+            )
+
+    # Convert social_network_x_conversations__new_metrics['tweet_public_metrics'] to a dictionary
+    conversation_metrics_df["tweet_public_metrics"] = conversation_metrics_df[
+        "tweet_public_metrics"
+    ].apply(lambda x: ast.literal_eval(x))
+
+    active_conversations_df = conversation_metrics_df[
+        conversation_metrics_df["tweet_public_metrics"].apply(
+            lambda x: x["reply_count"] > 0
+        )
+    ]
+    context.log.info(
+        f"Getting posts from {len(active_conversations_df)} active conversations."
+    )
 
     # Iterate over the x_conversations and search for replies to the conversation
     failure_count = 0
     index = 0
 
-    while index < len(x_conversations):
-        row = x_conversations.iloc[index]
+    while index < len(active_conversations_df):
+        row = active_conversations_df.iloc[index]
         try:
             search_term = f'conversation_id:{row["tweet_conversation_id"]} -RT -is:retweet lang:en'
 
             # Get posts that are replies to the conversation and log consumption to table
-            social_network_x_conversation_posts = x_resource.search(
+            x_conversation_posts = x_resource.search(
                 search_term,
                 n_results=10,
                 start_time=start_time,
@@ -224,29 +291,31 @@ def x_conversation_posts(
             )
 
             # Add article URL to the DataFrame
-            social_network_x_conversation_posts["article_url"] = row["article_url"]
+            x_conversation_posts["article_url"] = row["article_url"]
 
             # Remove timezone information from timestamp
-            social_network_x_conversation_posts["tweet_created_at"] = pd.to_datetime(
-                social_network_x_conversation_posts["tweet_created_at"]
+            x_conversation_posts["tweet_created_at"] = pd.to_datetime(
+                x_conversation_posts["tweet_created_at"]
             ).dt.tz_localize(None)
-            social_network_x_conversation_posts["author_created_at"] = pd.to_datetime(
-                social_network_x_conversation_posts["author_created_at"]
+
+            x_conversation_posts["author_created_at"] = pd.to_datetime(
+                x_conversation_posts["author_created_at"]
             ).dt.tz_localize(None)
 
             # Add partition_hour_utc_ts and current timestamp as new fields to the DataFrame
-            social_network_x_conversation_posts["partition_hour_utc_ts"] = (
-                partition_time.strftime("%Y-%m-%dT%H:%M:%S")
-            )
-            social_network_x_conversation_posts["record_loading_ts"] = (
-                datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            x_conversation_posts["partition_hour_utc_ts"] = partition_time.strftime(
+                "%Y-%m-%dT%H:%M:%S"
             )
 
-            # Concatenate the new social_network_x_conversation_posts to the DataFrame
+            x_conversation_posts["record_loading_ts"] = datetime.now().strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
+
+            # Concatenate the new x_conversation_posts to the DataFrame
             conversation_posts_df = pd.concat(
                 [
                     conversation_posts_df,
-                    social_network_x_conversation_posts.astype(post_columns),
+                    x_conversation_posts.astype(post_columns),
                 ]
             )
 
