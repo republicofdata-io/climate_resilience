@@ -1,8 +1,11 @@
+import json
+import re
 from datetime import datetime
 
 import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 
+from ..agents import conversation_classification_agent
 from ..partitions import hourly_partition_def
 
 
@@ -33,13 +36,13 @@ def social_network_conversation_climate_classifications(
     context,
     social_network_x_conversations,
     social_network_x_conversation_posts,
-) -> None:
+):
     # Get partition's time
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
     # Assemble full conversations
-    full_conversations = (
+    conversations_df = (
         (
             pd.merge(
                 social_network_x_conversations,
@@ -55,15 +58,67 @@ def social_network_conversation_climate_classifications(
                 x["tweet_created_at_x"]
             ),
         )
+        .assign(
+            tweet_created_at=lambda df: df["tweet_created_at"].apply(
+                lambda ts: ts.isoformat() if pd.notnull(ts) else None
+            )
+        )
         .loc[:, ["tweet_conversation_id", "tweet_id", "tweet_text", "tweet_created_at"]]
         .drop_duplicates()
+        .sort_values(by=["tweet_conversation_id", "tweet_created_at"])
     )
 
-    # Get count of unique conversations
-    unique_conversations = full_conversations["tweet_conversation_id"].nunique()
+    # Remove user mentions from tweet_text
+    conversations_df["tweet_text"] = conversations_df["tweet_text"].apply(
+        lambda x: re.sub(r"@\w+", "", x).strip()
+    )
+
+    # Group by tweet_conversation_id and aggregate tweet_texts into a list ordered by tweet_created_at
+    conversations_df = (
+        conversations_df.groupby("tweet_conversation_id")
+        .apply(
+            lambda x: x.sort_values("tweet_created_at")[
+                ["tweet_id", "tweet_created_at", "tweet_text"]
+            ].to_dict(orient="records")
+        )
+        .reset_index(name="posts")
+    )
 
     context.log.info(
-        f"Classifying {unique_conversations} social network conversation posts."
+        f"Classifying {len(conversations_df)} social network conversation posts."
     )
 
-    return None
+    # Initialize DataFrame to store classifications
+    conversation_classifications_df = pd.DataFrame()
+
+    # Iterate over all conversations and classify them
+    for _, conversation_df in conversations_df.iterrows():
+        conversation_dict = conversation_df.to_dict()
+        conversation_json = json.dumps(conversation_dict)
+        context.log.info(f"Classifying conversation: {conversation_json}")
+
+        conversation_classifications_output = conversation_classification_agent.invoke(
+            {"conversation_posts_json": conversation_json}
+        )
+        new_classification = pd.DataFrame([conversation_classifications_output.dict()])
+        context.log.info(f"Classification: {new_classification}")
+
+        conversation_classifications_df = pd.concat(
+            [conversation_classifications_df, new_classification], ignore_index=True
+        )
+
+    # Merge full conversations
+    conversation_classifications_df = pd.merge(
+        conversation_classifications_df,
+        social_network_x_conversations,
+        left_on="conversation_id",
+        right_on="tweet_conversation_id",
+    )
+
+    # Return asset
+    yield Output(
+        value=conversation_classifications_df,
+        metadata={
+            "num_rows": conversation_classifications_df.shape[0],
+        },
+    )
