@@ -38,8 +38,32 @@ def social_network_conversation_climate_classifications(
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
+    # Assemble full conversations
+    full_conversations = (
+        (
+            pd.merge(
+                social_network_x_conversations,
+                social_network_x_conversation_posts,
+                how="left",
+                on="tweet_conversation_id",
+            )
+        )
+        .assign(
+            tweet_id=lambda x: x["tweet_id_y"].combine_first(x["tweet_id_x"]),
+            tweet_text=lambda x: x["tweet_text_y"].combine_first(x["tweet_text_x"]),
+            tweet_created_at=lambda x: x["tweet_created_at_y"].combine_first(
+                x["tweet_created_at_x"]
+            ),
+        )
+        .loc[:, ["tweet_conversation_id", "tweet_id", "tweet_text", "tweet_created_at"]]
+        .drop_duplicates()
+    )
+
+    # Get count of unique conversations
+    unique_conversations = full_conversations["tweet_conversation_id"].nunique()
+
     context.log.info(
-        f"Classifying {len(social_network_x_conversations)} social network conversation posts."
+        f"Classifying {unique_conversations} social network conversation posts."
     )
 
     return None
