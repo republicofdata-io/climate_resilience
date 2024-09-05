@@ -12,6 +12,7 @@ if __name__ == "__main__":
             "feedparser==6.0.11",
             "langchain-core==0.2.38",
             "langchain-openai==0.1.23",
+            "pydantic==2.8.2",
             "spacy==3.7.5",
             "supabase==2.5.3",
         ],
