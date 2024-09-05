@@ -5,8 +5,57 @@ from datetime import datetime
 import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 
-from ..agents import conversation_classification_agent
+from ..agents import conversation_classification_agent, post_association_agent
 from ..partitions import hourly_partition_def
+
+
+def assemble_conversations(conversations, posts, classifications=None):
+    # Assemble full conversations
+    assembled_conversations = (
+        (
+            pd.merge(
+                conversations,
+                posts,
+                how="left",
+                on="tweet_conversation_id",
+            )
+        )
+        .assign(
+            tweet_id=lambda x: x["tweet_id_y"].combine_first(x["tweet_id_x"]),
+            tweet_text=lambda x: x["tweet_text_y"].combine_first(x["tweet_text_x"]),
+            tweet_created_at=lambda x: x["tweet_created_at_y"].combine_first(
+                x["tweet_created_at_x"]
+            ),
+        )
+        .assign(
+            tweet_created_at=lambda df: df["tweet_created_at"].apply(
+                lambda ts: ts.isoformat() if pd.notnull(ts) else None
+            )
+        )
+        .loc[:, ["tweet_conversation_id", "tweet_id", "tweet_text", "tweet_created_at"]]
+        .drop_duplicates()
+        .sort_values(by=["tweet_conversation_id", "tweet_created_at"])
+    )
+
+    # Filter conversations by classification if provided
+    if classifications is not None:
+        assembled_conversations = pd.merge(
+            assembled_conversations,
+            classifications,
+            left_on="tweet_conversation_id",
+            right_on="conversation_id",
+        ).drop(columns=["conversation_id"])
+
+        assembled_conversations = assembled_conversations[
+            assembled_conversations["classification"]
+        ]
+
+    # Remove user mentions from tweet_text
+    assembled_conversations["tweet_text"] = assembled_conversations["tweet_text"].apply(
+        lambda x: re.sub(r"@\w+", "", x).strip()
+    )
+
+    return assembled_conversations
 
 
 @asset(
@@ -42,35 +91,8 @@ def social_network_conversation_climate_classifications(
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
     # Assemble full conversations
-    conversations_df = (
-        (
-            pd.merge(
-                social_network_x_conversations,
-                social_network_x_conversation_posts,
-                how="left",
-                on="tweet_conversation_id",
-            )
-        )
-        .assign(
-            tweet_id=lambda x: x["tweet_id_y"].combine_first(x["tweet_id_x"]),
-            tweet_text=lambda x: x["tweet_text_y"].combine_first(x["tweet_text_x"]),
-            tweet_created_at=lambda x: x["tweet_created_at_y"].combine_first(
-                x["tweet_created_at_x"]
-            ),
-        )
-        .assign(
-            tweet_created_at=lambda df: df["tweet_created_at"].apply(
-                lambda ts: ts.isoformat() if pd.notnull(ts) else None
-            )
-        )
-        .loc[:, ["tweet_conversation_id", "tweet_id", "tweet_text", "tweet_created_at"]]
-        .drop_duplicates()
-        .sort_values(by=["tweet_conversation_id", "tweet_created_at"])
-    )
-
-    # Remove user mentions from tweet_text
-    conversations_df["tweet_text"] = conversations_df["tweet_text"].apply(
-        lambda x: re.sub(r"@\w+", "", x).strip()
+    conversations_df = assemble_conversations(
+        social_network_x_conversations, social_network_x_conversation_posts
     )
 
     # Group by tweet_conversation_id and aggregate tweet_texts into a list ordered by tweet_created_at
@@ -120,5 +142,60 @@ def social_network_conversation_climate_classifications(
         value=conversation_classifications_df,
         metadata={
             "num_rows": conversation_classifications_df.shape[0],
+        },
+    )
+
+
+@asset(
+    name="social_network_post_narrative_associations",
+    key_prefix=["enrichments"],
+    description="Associations between social network posts and narrative types",
+    io_manager_key="bigquery_io_manager",
+    ins={
+        "social_network_x_conversations": AssetIn(
+            key=["social_networks", "x_conversations"],
+            partition_mapping=TimeWindowPartitionMapping(
+                start_offset=-13, end_offset=-13
+            ),
+        ),
+        "social_network_x_conversation_posts": AssetIn(
+            key=["social_networks", "x_conversation_posts"],
+            partition_mapping=TimeWindowPartitionMapping(
+                start_offset=-13, end_offset=0
+            ),
+        ),
+        "social_network_conversation_climate_classifications": AssetIn(
+            key=["social_networks", "enrichments"],
+            partition_mapping=TimeWindowPartitionMapping(
+                start_offset=-13, end_offset=0
+            ),
+        ),
+    },
+    partitions_def=hourly_partition_def,
+    metadata={"partition_expr": "partition_hour_utc_ts"},
+    compute_kind="openai",
+)
+def social_network_post_narrative_associations(
+    context,
+    social_network_x_conversations,
+    social_network_x_conversation_posts,
+    social_network_conversation_climate_classifications,
+):
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    # Assemble full conversations
+    conversations_df = assemble_conversations(
+        social_network_x_conversations,
+        social_network_x_conversation_posts,
+        social_network_conversation_climate_classifications,
+    )
+
+    # Return asset
+    yield Output(
+        value=post_narratives_df,
+        metadata={
+            "num_rows": post_narratives_df.shape[0],
         },
     )
