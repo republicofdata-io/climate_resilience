@@ -192,7 +192,7 @@ def x_conversation_posts(
 
     # Calculate start and end times for the scraping of the social network
     start_time = partition_time.isoformat(timespec="seconds") + "Z"
-    end_time = (partition_time + pd.Timedelta(hours=1)).isoformat(
+    end_time = (partition_time + pd.Timedelta(hours=3)).isoformat(
         timespec="seconds"
     ) + "Z"
 
