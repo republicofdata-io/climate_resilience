@@ -6,7 +6,7 @@ import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 
 from ..agents import conversation_classification_agent, post_association_agent
-from ..partitions import hourly_partition_def
+from ..partitions import three_hour_partition_def
 
 
 def assemble_conversations(conversations, posts, classifications=None):
@@ -67,17 +67,15 @@ def assemble_conversations(conversations, posts, classifications=None):
         "social_network_x_conversations": AssetIn(
             key=["social_networks", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(
-                start_offset=-13, end_offset=-13
+                start_offset=-12, end_offset=-12
             ),
         ),
         "social_network_x_conversation_posts": AssetIn(
             key=["social_networks", "x_conversation_posts"],
-            partition_mapping=TimeWindowPartitionMapping(
-                start_offset=-13, end_offset=0
-            ),
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
     },
-    partitions_def=hourly_partition_def,
+    partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
     compute_kind="openai",
 )
@@ -155,23 +153,19 @@ def social_network_conversation_climate_classifications(
         "social_network_x_conversations": AssetIn(
             key=["social_networks", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(
-                start_offset=-13, end_offset=-13
+                start_offset=-12, end_offset=-12
             ),
         ),
         "social_network_x_conversation_posts": AssetIn(
             key=["social_networks", "x_conversation_posts"],
-            partition_mapping=TimeWindowPartitionMapping(
-                start_offset=-13, end_offset=0
-            ),
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
         "social_network_conversation_climate_classifications": AssetIn(
             key=["social_networks", "enrichments"],
-            partition_mapping=TimeWindowPartitionMapping(
-                start_offset=-13, end_offset=0
-            ),
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
     },
-    partitions_def=hourly_partition_def,
+    partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
     compute_kind="openai",
 )
