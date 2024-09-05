@@ -4,7 +4,7 @@ import os
 
 from dagster import Definitions
 
-from .assets import medias, social_networks, x
+from .assets import geolocation, medias, narratives, x
 from .io_managers import bigquery_io_manager
 from .jobs import (
     refresh_media_feeds_job,
@@ -31,7 +31,8 @@ defs = Definitions(
         *medias.media_feed_assets,
         x.x_conversations,
         x.x_conversation_posts,
-        social_networks.social_network_user_profile_geolocations,
+        geolocation.social_network_user_profile_geolocations,
+        narratives.social_network_conversation_climate_classifications,
     ],
     jobs=[
         refresh_media_feeds_job,
