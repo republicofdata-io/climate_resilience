@@ -33,8 +33,8 @@ defs = Definitions(
         *medias.media_feed_assets,
         x.x_conversations,
         x.x_conversation_posts,
-        geolocation.social_network_user_profile_geolocations,
-        narratives.social_network_conversation_climate_classifications,
+        geolocation.user_geolocations,
+        narratives.conversation_classifications,
     ],
     jobs=[
         refresh_media_feeds_job,

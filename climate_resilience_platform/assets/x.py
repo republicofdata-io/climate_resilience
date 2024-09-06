@@ -186,6 +186,10 @@ def x_conversation_posts(
     x_conversations,
     x_resource: XResource,
 ):
+    context.log.info(
+        f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
+    )
+
     # Get partition's time
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")

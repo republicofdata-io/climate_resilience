@@ -23,7 +23,7 @@ refresh_social_network_posts_job = define_asset_job(
     name="refresh_social_network_posts_job",
     selection=AssetSelection.assets(
         x.x_conversation_posts,
-        geolocation.social_network_user_profile_geolocations,
+        geolocation.user_geolocations,
     ),
     partitions_def=three_hour_partition_def,
     tags={"dagster/max_runtime": 30 * 60},
@@ -32,7 +32,7 @@ refresh_social_network_posts_job = define_asset_job(
 refresh_narrative_enrichments_job = define_asset_job(
     name="refresh_narrative_enrichments_job",
     selection=AssetSelection.assets(
-        narratives.social_network_conversation_climate_classifications,
+        narratives.conversation_classifications,
     ),
     partitions_def=three_hour_partition_def,
     tags={"dagster/max_runtime": 30 * 60},

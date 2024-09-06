@@ -4,7 +4,7 @@ from datetime import datetime
 import pandas as pd
 import requests
 import spacy
-from dagster import AssetIn, Output, asset
+from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 
 from ..partitions import three_hour_partition_def
 
@@ -47,25 +47,24 @@ def most_precise_location(group):
 
 
 @asset(
-    name="social_network_user_profile_geolocations",
+    name="user_geolocations",
     key_prefix=["enrichments"],
     description="Geolocation of social network user's profile location",
     io_manager_key="bigquery_io_manager",
     ins={
-        "social_network_x_conversations": AssetIn(
+        "x_conversations": AssetIn(
             key=["social_networks", "x_conversations"],
         ),
-        "social_network_x_conversation_posts": AssetIn(
+        "x_conversation_posts": AssetIn(
             key=["social_networks", "x_conversation_posts"],
+            partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=1),
         ),
     },
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
     compute_kind="python",
 )
-def social_network_user_profile_geolocations(
-    context, social_network_x_conversations, social_network_x_conversation_posts
-):
+def user_geolocations(context, x_conversations, x_conversation_posts):
     social_network_user_geolocations_columns = {
         "social_network_profile_id": "string",
         "social_network_profile_username": "string",
@@ -79,6 +78,14 @@ def social_network_user_profile_geolocations(
         "longitude": "string",
         "geolocation_ts": "datetime64[ns]",
     }
+    # Log upstream asset's partition keys
+    context.log.info(
+        f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
+    )
+    context.log.info(
+        f"Partition key range for x_conversation_posts: {context.asset_partition_key_range_for_input('x_conversation_posts')}"
+    )
+
     # Get partition's time
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
@@ -92,7 +99,7 @@ def social_network_user_profile_geolocations(
 
     # Concatenate the social network posts
     social_network_posts = pd.concat(
-        [social_network_x_conversations, social_network_x_conversation_posts],
+        [x_conversations, x_conversation_posts],
         ignore_index=True,
     )
 
