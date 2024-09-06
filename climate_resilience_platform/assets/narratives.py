@@ -49,6 +49,11 @@ def assemble_conversations(conversations, posts, classifications=None):
         .sort_values(by=["tweet_conversation_id", "tweet_created_at"])
     )
 
+    # Remove user mentions from tweet_text
+    assembled_conversations["tweet_text"] = assembled_conversations["tweet_text"].apply(
+        lambda x: re.sub(r"@\w+", "", x).strip()
+    )
+
     # Filter conversations by classification if provided
     if classifications is not None:
         assembled_conversations = pd.merge(
@@ -61,11 +66,6 @@ def assemble_conversations(conversations, posts, classifications=None):
         assembled_conversations = assembled_conversations[
             assembled_conversations["classification"]
         ]
-
-    # Remove user mentions from tweet_text
-    assembled_conversations["tweet_text"] = assembled_conversations["tweet_text"].apply(
-        lambda x: re.sub(r"@\w+", "", x).strip()
-    )
 
     return assembled_conversations
 
