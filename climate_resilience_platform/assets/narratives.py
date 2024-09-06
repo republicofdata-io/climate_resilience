@@ -251,9 +251,7 @@ def post_narrative_associations(
                         ignore_index=True,
                     )
             except Exception as e:
-                print(
-                    f"Failed to associate posts in conversation {conversation_df['conversation_id']}"
-                )
+                print(f"Failed to associate posts")
                 print(e)
 
         # Append partition time to DataFrame
