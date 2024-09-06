@@ -35,6 +35,7 @@ defs = Definitions(
         x.x_conversation_posts,
         geolocation.user_geolocations,
         narratives.conversation_classifications,
+        narratives.post_narrative_associations,
     ],
     jobs=[
         refresh_media_feeds_job,
