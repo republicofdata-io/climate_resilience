@@ -56,7 +56,7 @@ def assemble_conversations(conversations, posts, classifications=None):
             classifications,
             left_on="tweet_conversation_id",
             right_on="conversation_id",
-        ).drop(columns=["conversation_id"])
+        ).drop(columns=["conversation_id", "partition_time"])
 
         assembled_conversations = assembled_conversations[
             assembled_conversations["classification"]
