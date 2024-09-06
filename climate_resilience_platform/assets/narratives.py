@@ -11,7 +11,13 @@ from ..partitions import three_hour_partition_def
 conversation_classification_columns = {
     "conversation_id": "string",
     "classification": "string",
-    "partition_hour_utc_ts": "datetime64[ns]",
+    "partition_time": "datetime64[ns]",
+}
+
+post_association_columns = {
+    "post_id": "string",
+    "discourse_type": "string",
+    "partition_time": "datetime64[ns]",
 }
 
 
@@ -82,7 +88,7 @@ def assemble_conversations(conversations, posts, classifications=None):
         ),
     },
     partitions_def=three_hour_partition_def,
-    metadata={"partition_expr": "partition_hour_utc_ts"},
+    metadata={"partition_expr": "partition_time"},
     compute_kind="openai",
 )
 def conversation_classifications(
@@ -102,9 +108,6 @@ def conversation_classifications(
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
-    # Assemble full conversations
-    conversations_df = assemble_conversations(x_conversations, x_conversation_posts)
-
     # Initialize DataFrame to store classifications
     conversation_classifications_df = pd.DataFrame()
     conversation_classifications_df = conversation_classifications_df.reindex(
@@ -114,7 +117,10 @@ def conversation_classifications(
         conversation_classification_columns
     )
 
-    if not conversations_df.empty:
+    if not x_conversations.empty:
+        # Assemble full conversations
+        conversations_df = assemble_conversations(x_conversations, x_conversation_posts)
+
         # Group by tweet_conversation_id and aggregate tweet_texts into a list ordered by tweet_created_at
         conversations_df = (
             conversations_df.groupby("tweet_conversation_id")
@@ -150,6 +156,9 @@ def conversation_classifications(
                 [conversation_classifications_df, new_classification], ignore_index=True
             )
 
+        # Append partition time to DataFrame
+        conversation_classifications_df["partition_time"] = partition_time
+
     # Return asset
     yield Output(
         value=conversation_classifications_df,
@@ -160,7 +169,7 @@ def conversation_classifications(
 
 
 @asset(
-    name="social_network_post_narrative_associations",
+    name="post_narrative_associations",
     key_prefix=["enrichments"],
     description="Associations between social network posts and narrative types",
     io_manager_key="bigquery_io_manager",
@@ -176,15 +185,15 @@ def conversation_classifications(
             partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
         "conversation_classifications": AssetIn(
-            key=["social_networks", "enrichments"],
-            partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
+            key=["enrichments", "conversation_classifications"],
+            partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=0),
         ),
     },
     partitions_def=three_hour_partition_def,
-    metadata={"partition_expr": "partition_hour_utc_ts"},
+    metadata={"partition_expr": "partition_time"},
     compute_kind="openai",
 )
-def social_network_post_narrative_associations(
+def post_narrative_associations(
     context,
     x_conversations,
     x_conversation_posts,
@@ -205,39 +214,48 @@ def social_network_post_narrative_associations(
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
-    # Assemble full conversations
-    conversations_df = assemble_conversations(
-        x_conversations,
-        x_conversation_posts,
-        conversation_classifications,
+    # Initialize DataFrame to store classifications
+    post_associations_df = pd.DataFrame()
+    post_associations_df = post_associations_df.reindex(
+        columns=list(post_association_columns.keys())
     )
+    post_associations_df = post_associations_df.astype(post_association_columns)
 
-    # Associate posts with a discourse type
-    post_associations_df = pd.DataFrame(columns=["post_id", "discourse_type"])
+    if not x_conversations.empty:
+        # Assemble full conversations
+        conversations_df = assemble_conversations(
+            x_conversations,
+            x_conversation_posts,
+            conversation_classifications,
+        )
 
-    # Iterate over all conversations and classify them
-    for _, conversation_df in conversations_df.iterrows():
-        conversation_dict = conversation_df.to_dict()
-        conversation_json = json.dumps(conversation_dict)
+        # Iterate over all conversations and classify them
+        for _, conversation_df in conversations_df.iterrows():
+            conversation_dict = conversation_df.to_dict()
+            conversation_json = json.dumps(conversation_dict)
 
-        try:
-            post_associations_output = post_association_agent.invoke(
-                {"conversation_posts_json": conversation_json}
-            )
-
-            for association in post_associations_output.post_associations:
-                new_row = {
-                    "post_id": association.post_id,
-                    "discourse_type": association.discourse,
-                }
-                post_associations_df = pd.concat(
-                    [post_associations_df, pd.DataFrame([new_row])], ignore_index=True
+            try:
+                post_associations_output = post_association_agent.invoke(
+                    {"conversation_posts_json": conversation_json}
                 )
-        except Exception as e:
-            print(
-                f"Failed to associate posts in conversation {conversation_df['conversation_id']}"
-            )
-            print(e)
+
+                for association in post_associations_output.post_associations:
+                    new_row = {
+                        "post_id": association.post_id,
+                        "discourse_type": association.discourse,
+                    }
+                    post_associations_df = pd.concat(
+                        [post_associations_df, pd.DataFrame([new_row])],
+                        ignore_index=True,
+                    )
+            except Exception as e:
+                print(
+                    f"Failed to associate posts in conversation {conversation_df['conversation_id']}"
+                )
+                print(e)
+
+        # Append partition time to DataFrame
+        conversations_df["partition_time"] = partition_time
 
     # Return asset
     yield Output(
