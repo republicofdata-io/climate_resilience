@@ -233,11 +233,13 @@ def post_narrative_associations(
         for _, conversation_df in conversations_df.iterrows():
             conversation_dict = conversation_df.to_dict()
             conversation_json = json.dumps(conversation_dict)
+            context.log.info(f"Classifying conversation: {conversation_json}")
 
             try:
                 post_associations_output = post_association_agent.invoke(
                     {"conversation_posts_json": conversation_json}
                 )
+                context.log.info(f"Associations: {post_associations_output}")
 
                 for association in post_associations_output.post_associations:
                     new_row = {
@@ -255,7 +257,7 @@ def post_narrative_associations(
                 print(e)
 
         # Append partition time to DataFrame
-        conversations_df["partition_time"] = partition_time
+        post_associations_df["partition_time"] = partition_time
 
     # Return asset
     yield Output(
