@@ -55,9 +55,10 @@ def build_media_feed_assets(
         for entry in feed.entries:
             if categories != "None":
                 # Check if the article has at least one matching category
+                entry_tags = getattr(entry, "tags", [])
                 if not any(
                     category.strip().lower()
-                    in (tag.term.strip().lower() for tag in entry.tags)
+                    in (tag.term.strip().lower() for tag in entry_tags)
                     for category in categories.split(",")
                 ):
                     continue  # Skip this article if no matching categories are found
@@ -71,7 +72,7 @@ def build_media_feed_assets(
                     "link": entry.link,
                     "summary": entry.summary,
                     "author": entry.author if "author" in entry else None,
-                    "tags": [tag.term for tag in entry.tags],
+                    "tags": [tag.term for tag in getattr(entry, "tags", [])],
                     "medias": (
                         [content["url"] for content in entry.media_content]
                         if "media_content" in entry
