@@ -8,6 +8,7 @@ from .assets import data_lake
 from .assets.analytics import analytics_assets
 from .io_managers import bigquery_io_manager
 from .jobs import (
+    refresh_analytics_job,
     refresh_media_feeds_job,
     refresh_narrative_enrichments_job,
     refresh_social_network_conversations_job,
@@ -15,6 +16,7 @@ from .jobs import (
 )
 from .resources import dbt_resource, supabase_resource, x_resource
 from .schedules import (
+    refresh_analytics_schedule,
     refresh_media_feeds_schedule,
     refresh_narrative_enrichments_schedule,
     refresh_social_network_conversations_schedule,
@@ -47,12 +49,14 @@ defs = Definitions(
         *data_lake_assets,
     ],
     jobs=[
+        refresh_analytics_job,
         refresh_media_feeds_job,
         refresh_social_network_conversations_job,
         refresh_social_network_posts_job,
         refresh_narrative_enrichments_job,
     ],
     schedules=[
+        refresh_analytics_schedule,
         refresh_media_feeds_schedule,
         refresh_social_network_conversations_schedule,
         refresh_social_network_posts_schedule,
