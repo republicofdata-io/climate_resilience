@@ -9,3 +9,15 @@ sources:
         meta:
           dagster:
             asset_key: ["medias", "nytimes_articles"]
+      - name: x_conversations
+        meta:
+          dagster:
+            asset_key: ["social_networks", "x_conversations"]
+      - name: x_conversation_posts
+        meta:
+          dagster:
+            asset_key: ["social_networks", "x_conversation_posts"]
+      - name: user_geolocations
+        meta:
+          dagster:
+            asset_key: ["enrichments", "user_geolocations"]

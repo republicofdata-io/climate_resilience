@@ -1,16 +1,9 @@
-analytics:
-  target: dev
+platform_analytics:
+  target: analytics
   outputs:
-    prod:
+    analytics:
       type: bigquery
       method: oauth
-      project: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
-      dataset: "{{ env_var('BIGQUERY_ANALYTICS_DATASET') }}"
-      threads: 1
-    dev:
-      type: bigquery
-      method: service-account
-      keyfile: "{{ env_var('BIGQUERY_KEYFILE_PATH') }}"
       project: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
       dataset: "{{ env_var('BIGQUERY_ANALYTICS_DATASET') }}"
       threads: 1

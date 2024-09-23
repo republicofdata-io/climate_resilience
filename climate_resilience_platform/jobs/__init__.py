@@ -1,6 +1,6 @@
 from dagster import AssetSelection, define_asset_job
 
-from ..assets import geolocation, medias, narratives, x
+from ..assets.data_lake import geolocation, medias, narratives, x
 from ..partitions import hourly_partition_def, three_hour_partition_def
 
 refresh_media_feeds_job = define_asset_job(

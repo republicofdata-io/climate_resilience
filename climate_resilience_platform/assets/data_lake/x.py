@@ -13,9 +13,9 @@ from dagster import (
     asset,
 )
 
-from ..partitions import hourly_partition_def, three_hour_partition_def
-from ..resources.supabase_resource import SupabaseResource
-from ..resources.x_resource import XResource, XResourceException
+from ...partitions import hourly_partition_def, three_hour_partition_def
+from ...resources.supabase_resource import SupabaseResource
+from ...resources.x_resource import XResource, XResourceException
 
 media_article_columns = {
     "media": "string",

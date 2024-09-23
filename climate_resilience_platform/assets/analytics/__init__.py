@@ -6,6 +6,16 @@ from dagster_dbt import DagsterDbtTranslator, DbtCliResource, dbt_assets
 
 # Custom dbt translator to dynamically set asset properties
 class CustomDagsterDbtTranslator(DagsterDbtTranslator):
+    def get_asset_key(self, dbt_resource_props: Mapping[str, Any]):
+        asset_key = super().get_asset_key(dbt_resource_props)
+
+        # Check if the resource type is not a source
+        if dbt_resource_props["resource_type"] != "source":
+            # Add the "analytics" prefix
+            asset_key = asset_key.with_prefix("analytics")
+
+        return asset_key
+
     def get_group_name(self, dbt_resource_props: Mapping[str, Any]) -> Optional[str]:
         return "analytics"
 
