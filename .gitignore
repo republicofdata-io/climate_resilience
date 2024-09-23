@@ -1,16 +1,28 @@
+# vscode
+**/.vscode/settings.json
+
 # Environments
-.venv
-.env
-*.lock
+**/.env
+**/.venv*
+poetry.lock
 
-# Local dev
+# local files
 .DS_Store
-.dagster
-pyproject.toml
-TODO.md
+.vscode
 
-# Build
+# python
+dist
+logs
 __pycache__
-*.html
-*_files
-*.knit.md
+
+# dagster
+.dagster
+
+# dbt
+**/target/*
+!**/target/manifest.json
+
+**/dbt_packages/
+**/logs/
+**/.user.yml
+**/package-lock.yml

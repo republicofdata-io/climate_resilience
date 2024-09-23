@@ -7,8 +7,11 @@ if __name__ == "__main__":
         install_requires=[
             "dagster==1.8.4",
             "dagster-cloud==1.8.4",
+            "dagster-dbt==0.24.8",
             "dagster-gcp==0.24.4",
             "dagster-gcp-pandas==0.24.4",
+            "dbt-bigquery==1.8.2",
+            "dbt-core==1.8.6",
             "feedparser==6.0.11",
             "langchain-core==0.2.38",
             "langchain-openai==0.1.23",

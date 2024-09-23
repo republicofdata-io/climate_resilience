@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: data_lake
+    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+    schema: "{{ env_var('BIGQUERY_DATASET') }}"
+    tables:
+      - name: nytimes_articles
+        meta:
+          dagster:
+            asset_key: ["medias", "nytimes_articles"]

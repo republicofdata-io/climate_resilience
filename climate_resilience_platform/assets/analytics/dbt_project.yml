@@ -1,0 +1,16 @@
+name: "analytics"
+version: "0.1.0"
+require-dbt-version: ">=1.8.6"
+config-version: 2
+
+profile: analytics
+
+models:
+  analytics:
+    +materialized: table
+    staging:
+      +schema: staging
+    integration:
+      +schema: integration
+    warehouse:
+      +schema: warehouse

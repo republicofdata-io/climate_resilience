@@ -5,6 +5,7 @@ import os
 from dagster import Definitions
 
 from .assets import geolocation, medias, narratives, x
+from .assets.analytics import analytics_assets
 from .io_managers import bigquery_io_manager
 from .jobs import (
     refresh_media_feeds_job,
@@ -12,7 +13,7 @@ from .jobs import (
     refresh_social_network_conversations_job,
     refresh_social_network_posts_job,
 )
-from .resources import supabase_resource, x_resource
+from .resources import dbt_resource, supabase_resource, x_resource
 from .schedules import (
     refresh_media_feeds_schedule,
     refresh_narrative_enrichments_schedule,
@@ -36,6 +37,7 @@ defs = Definitions(
         geolocation.user_geolocations,
         narratives.conversation_classifications,
         narratives.post_narrative_associations,
+        analytics_assets,
     ],
     jobs=[
         refresh_media_feeds_job,
@@ -51,6 +53,7 @@ defs = Definitions(
     ],
     resources={
         "bigquery_io_manager": bigquery_io_manager,
+        "dbt_resource": dbt_resource,
         "supabase_resource": supabase_resource,
         "x_resource": x_resource,
     },
