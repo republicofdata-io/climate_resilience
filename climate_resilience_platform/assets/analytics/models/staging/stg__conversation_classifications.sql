@@ -8,7 +8,8 @@ base as (
 
     select distinct
         cast(conversation_id as string) as conversation_natural_key,
-        
+        'x' as social_network_source,
+
         cast(classification as string) as classification,
         cast(partition_time as timestamp) as conversation_classification_partition_ts,
     
