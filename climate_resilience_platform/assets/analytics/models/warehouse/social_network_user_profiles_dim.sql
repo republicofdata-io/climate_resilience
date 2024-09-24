@@ -24,6 +24,7 @@ final as (
         social_network_profile_location_admin1_code,
         social_network_profile_location_latitude,
         social_network_profile_location_longitude,
+        social_network_profile_location_h3_r3,
 
         social_network_profile_creation_ts
     
