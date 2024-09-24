@@ -1,0 +1,9 @@
+platform_analytics:
+  target: analytics
+  outputs:
+    analytics:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+      dataset: "{{ env_var('BIGQUERY_ANALYTICS_DATASET') }}"
+      threads: 1

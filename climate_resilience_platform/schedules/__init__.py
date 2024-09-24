@@ -1,8 +1,14 @@
 from datetime import timedelta
 
-from dagster import RunRequest, build_schedule_from_partitioned_job, schedule
+from dagster import (
+    RunRequest,
+    ScheduleDefinition,
+    build_schedule_from_partitioned_job,
+    schedule,
+)
 
 from ..jobs import (
+    refresh_analytics_job,
     refresh_media_feeds_job,
     refresh_narrative_enrichments_job,
     refresh_social_network_conversations_job,
@@ -42,3 +48,8 @@ def refresh_narrative_enrichments_schedule(context):
         current_time=execution_time - timedelta(minutes=45)
     )
     return RunRequest(partition_key=partition_key)
+
+
+refresh_analytics_schedule = ScheduleDefinition(
+    job=refresh_analytics_job, cron_schedule="0 7,19 * * *"
+)

@@ -5,8 +5,8 @@ import feedparser
 import pandas as pd
 from dagster import AssetExecutionContext, AssetsDefinition, Output, asset
 
-from ..partitions import hourly_partition_def
-from ..resources import SupabaseResource
+from ...partitions import hourly_partition_def
+from ...resources import SupabaseResource
 
 media_article_columns = {
     "media": "string",

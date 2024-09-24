@@ -1,6 +1,7 @@
 from dagster import AssetSelection, define_asset_job
 
-from ..assets import geolocation, medias, narratives, x
+from ..assets.analytics import analytics_assets
+from ..assets.data_lake import geolocation, medias, narratives, x
 from ..partitions import hourly_partition_def, three_hour_partition_def
 
 refresh_media_feeds_job = define_asset_job(
@@ -36,5 +37,13 @@ refresh_narrative_enrichments_job = define_asset_job(
         narratives.post_narrative_associations,
     ),
     partitions_def=three_hour_partition_def,
+    tags={"dagster/max_runtime": 30 * 60},
+)
+
+refresh_analytics_job = define_asset_job(
+    name="refresh_analytics_job",
+    selection=AssetSelection.assets(
+        analytics_assets,
+    ),
     tags={"dagster/max_runtime": 30 * 60},
 )

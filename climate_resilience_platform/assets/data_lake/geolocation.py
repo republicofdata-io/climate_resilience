@@ -6,7 +6,7 @@ import requests
 import spacy
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 
-from ..partitions import three_hour_partition_def
+from ...partitions import three_hour_partition_def
 
 spacy.cli.download("en_core_web_sm")
 

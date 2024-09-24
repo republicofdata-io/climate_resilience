@@ -5,8 +5,8 @@ from datetime import datetime
 import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 
-from ..agents import conversation_classification_agent, post_association_agent
-from ..partitions import three_hour_partition_def
+from ...agents import conversation_classification_agent, post_association_agent
+from ...partitions import three_hour_partition_def
 
 conversation_classification_columns = {
     "conversation_id": "string",
