@@ -104,6 +104,16 @@ dedup_geolocations as (
     
     from append_geolocations
 
+),
+
+encode_h3_cells as (
+
+    select
+        *,
+        `carto-os`.carto.H3_FROMLONGLAT(social_network_profile_location_longitude, social_network_profile_location_latitude, 3) as social_network_profile_location_h3_r3
+    
+    from dedup_geolocations
+
 )
 
-select * from dedup_geolocations
+select * from encode_h3_cells
