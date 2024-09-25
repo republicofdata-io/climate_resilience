@@ -6,6 +6,7 @@ from dagster import Definitions, load_assets_from_modules
 
 from .assets import data_lake
 from .assets.analytics import analytics_assets
+from .assets.prototypes import investigative_reporter_ai_agent
 from .io_managers import bigquery_io_manager
 from .jobs import (
     refresh_analytics_job,
@@ -14,7 +15,7 @@ from .jobs import (
     refresh_social_network_conversations_job,
     refresh_social_network_posts_job,
 )
-from .resources import dbt_resource, supabase_resource, x_resource
+from .resources import dbt_resource, hex_resource, supabase_resource, x_resource
 from .schedules import (
     refresh_analytics_schedule,
     refresh_media_feeds_schedule,
@@ -44,10 +45,7 @@ data_lake_assets = load_assets_from_modules(
 
 # Define the Dagster app
 defs = Definitions(
-    assets=[
-        analytics_assets,
-        *data_lake_assets,
-    ],
+    assets=[analytics_assets, *data_lake_assets, investigative_reporter_ai_agent],
     jobs=[
         refresh_analytics_job,
         refresh_media_feeds_job,
@@ -65,6 +63,7 @@ defs = Definitions(
     resources={
         "bigquery_io_manager": bigquery_io_manager,
         "dbt_resource": dbt_resource,
+        "hex_resource": hex_resource,
         "supabase_resource": supabase_resource,
         "x_resource": x_resource,
     },

@@ -8,6 +8,7 @@ if __name__ == "__main__":
             "dagster==1.8.8",
             "dagster-cloud==1.8.8",
             "dagster-dbt==0.24.8",
+            "dagster-hex==0.1.3",
             "dagster-gcp==0.24.8",
             "dagster-gcp-pandas==0.24.8",
             "dbt-bigquery==1.8.2",

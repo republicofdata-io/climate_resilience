@@ -3,6 +3,7 @@ import os
 from dagster import file_relative_path
 from dagster_dbt import DbtCliResource
 
+from .hex_resource import ConfigurableHexResource
 from .supabase_resource import SupabaseResource
 from .x_resource import XResource
 
@@ -17,4 +18,8 @@ dbt_resource = DbtCliResource(
     profiles_dir=file_relative_path(__file__, "../assets/analytics/"),
     profile="platform_analytics",
     target="analytics",
+)
+
+hex_resource = ConfigurableHexResource(
+    hex_api_key=os.environ["HEX_API_KEY"],
 )
