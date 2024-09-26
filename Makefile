@@ -1,7 +1,7 @@
 .PHONY: docker
 
 dagster:
-	dagster dev --module-name climate_resilience_platform
+	dagster dev --module-name climate_resilience
 
 dbt-compile:
-	dbt parse --profiles-dir climate_resilience_platform/assets/analytics --project-dir climate_resilience_platform/assets/analytics
+	dbt parse --profiles-dir climate_resilience/assets/gold --project-dir climate_resilience/assets/gold

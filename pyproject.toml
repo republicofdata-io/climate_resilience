@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "climate-resilience-platform"
+name = "climate-resilience"
 version = "0.1.0"
 description = ""
 authors = ["Olivier Dupuis <olivier@republicofdata.io>"]

@@ -33,9 +33,8 @@ def build_media_feed_assets(
 ) -> AssetsDefinition:
     @asset(
         name=f"{slug}_articles",
-        key_prefix=["medias"],
         description=f"Media feed for {name}",
-        io_manager_key="bigquery_io_manager",
+        io_manager_key="bronze_io_manager",
         partitions_def=hourly_partition_def,
         metadata={"partition_expr": "published_ts"},
         output_required=False,

@@ -72,18 +72,17 @@ def assemble_conversations(conversations, posts, classifications=None):
 
 @asset(
     name="conversation_classifications",
-    key_prefix=["enrichments"],
     description="Classification of conversations as climate-related or not",
-    io_manager_key="bigquery_io_manager",
+    io_manager_key="silver_io_manager",
     ins={
         "x_conversations": AssetIn(
-            key=["social_networks", "x_conversations"],
+            key=["bronze", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(
                 start_offset=-4, end_offset=-4
             ),
         ),
         "x_conversation_posts": AssetIn(
-            key=["social_networks", "x_conversation_posts"],
+            key=["bronze", "x_conversation_posts"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
     },
@@ -170,22 +169,21 @@ def conversation_classifications(
 
 @asset(
     name="post_narrative_associations",
-    key_prefix=["enrichments"],
     description="Associations between social network posts and narrative types",
-    io_manager_key="bigquery_io_manager",
+    io_manager_key="silver_io_manager",
     ins={
         "x_conversations": AssetIn(
-            key=["social_networks", "x_conversations"],
+            key=["bronze", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(
                 start_offset=-4, end_offset=-4
             ),
         ),
         "x_conversation_posts": AssetIn(
-            key=["social_networks", "x_conversation_posts"],
+            key=["bronze", "x_conversation_posts"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
         "conversation_classifications": AssetIn(
-            key=["enrichments", "conversation_classifications"],
+            key=["silver", "conversation_classifications"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=0),
         ),
     },

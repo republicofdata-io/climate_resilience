@@ -5,7 +5,7 @@ from dagster import MetadataValue, Output, asset
 from dagster_hex.resources import DEFAULT_POLL_INTERVAL
 from dagster_hex.types import HexOutput
 
-from ..resources.hex_resource import ConfigurableHexResource
+from ...resources.hex_resource import ConfigurableHexResource
 
 
 class ConversationBrief(TypedDict):
@@ -15,9 +15,7 @@ class ConversationBrief(TypedDict):
 @asset(
     name="investigative_reporter_ai_agent",
     description="Investigative Reporter AI Agent",
-    io_manager_key="bigquery_io_manager",
-    group_name="prototypes",
-    key_prefix=["prototypes"],
+    io_manager_key="prototypes_io_manager",
 )
 def investigative_reporter_ai_agent(hex_resource: ConfigurableHexResource):
     hex_client = hex_resource.create_client()

@@ -11,23 +11,20 @@ class CustomDagsterDbtTranslator(DagsterDbtTranslator):
 
         # Check if the resource type is not a source
         if dbt_resource_props["resource_type"] != "source":
-            # Add the "analytics" prefix
-            asset_key = asset_key.with_prefix("analytics")
+            asset_key = asset_key.with_prefix("gold")
 
         return asset_key
 
     def get_group_name(self, dbt_resource_props: Mapping[str, Any]) -> Optional[str]:
-        return "analytics"
+        return "gold"
 
 
 # Build assets for each account connector view
 @dbt_assets(
     dagster_dbt_translator=CustomDagsterDbtTranslator(),
-    manifest=Path(
-        "climate_resilience_platform/assets/analytics/target", "manifest.json"
-    ),
+    manifest=Path("climate_resilience/assets/gold/target", "manifest.json"),
 )
-def analytics_assets(context, dbt_resource: DbtCliResource):
+def gold_assets(context, dbt_resource: DbtCliResource):
     dbt_build_args = ["build"]
 
     yield from dbt_resource.cli(dbt_build_args, context=context).stream()

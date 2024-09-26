@@ -1,7 +1,8 @@
 from dagster import AssetSelection, define_asset_job
 
-from ..assets.analytics import analytics_assets
-from ..assets.data_lake import geolocation, medias, narratives, x
+from ..assets.bronze import medias, x
+from ..assets.gold import gold_assets
+from ..assets.silver import geolocation, narratives
 from ..partitions import hourly_partition_def, three_hour_partition_def
 
 refresh_media_feeds_job = define_asset_job(
@@ -40,10 +41,10 @@ refresh_narrative_enrichments_job = define_asset_job(
     tags={"dagster/max_runtime": 30 * 60},
 )
 
-refresh_analytics_job = define_asset_job(
-    name="refresh_analytics_job",
+refresh_gold_job = define_asset_job(
+    name="refresh_gold_job",
     selection=AssetSelection.assets(
-        analytics_assets,
+        gold_assets,
     ),
     tags={"dagster/max_runtime": 30 * 60},
 )

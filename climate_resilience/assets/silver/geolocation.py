@@ -48,15 +48,14 @@ def most_precise_location(group):
 
 @asset(
     name="user_geolocations",
-    key_prefix=["enrichments"],
     description="Geolocation of social network user's profile location",
-    io_manager_key="bigquery_io_manager",
+    io_manager_key="silver_io_manager",
     ins={
         "x_conversations": AssetIn(
-            key=["social_networks", "x_conversations"],
+            key=["bronze", "x_conversations"],
         ),
         "x_conversation_posts": AssetIn(
-            key=["social_networks", "x_conversation_posts"],
+            key=["bronze", "x_conversation_posts"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=1),
         ),
     },

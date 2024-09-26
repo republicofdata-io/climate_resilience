@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 if __name__ == "__main__":
     setup(
-        name="climate_resilience_platform",
+        name="climate_resilience",
         packages=find_packages(),
         install_requires=[
             "dagster==1.8.8",
