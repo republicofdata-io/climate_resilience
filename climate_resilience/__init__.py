@@ -1,3 +1,5 @@
+# TODO: Job that kicks off every 6 hours and which uses connversations that started more than 12 hours ago
+
 import base64
 import json
 import os
