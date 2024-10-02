@@ -1,6 +1,6 @@
 with source as (
 
-    select * from {{ source('data_lake', 'post_narrative_associations') }}
+    select * from {{ source('silver', 'post_narrative_associations') }}
 
 ),
 

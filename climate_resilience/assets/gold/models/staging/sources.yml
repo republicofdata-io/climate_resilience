@@ -1,26 +1,14 @@
 version: 2
 
 sources:
-  - name: data_lake
+  - name: bronze
     database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
-    schema: "{{ env_var('BIGQUERY_GOLD_DATASET') }}"
+    schema: "{{ env_var('BIGQUERY_BRONZE_DATASET') }}"
     tables:
-      - name: conversation_classifications
-        meta:
-          dagster:
-            asset_key: ["silver", "conversation_classifications"]
       - name: nytimes_articles
         meta:
           dagster:
             asset_key: ["bronze", "nytimes_articles"]
-      - name: post_narrative_associations
-        meta:
-          dagster:
-            asset_key: ["silver", "post_narrative_associations"]
-      - name: user_geolocations
-        meta:
-          dagster:
-            asset_key: ["silver", "user_geolocations"]
       - name: x_conversations
         meta:
           dagster:
@@ -29,3 +17,20 @@ sources:
         meta:
           dagster:
             asset_key: ["bronze", "x_conversation_posts"]
+
+  - name: silver
+    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+    schema: "{{ env_var('BIGQUERY_SILVER_DATASET') }}"
+    tables:
+      - name: conversation_classifications
+        meta:
+          dagster:
+            asset_key: ["silver", "conversation_classifications"]
+      - name: post_narrative_associations
+        meta:
+          dagster:
+            asset_key: ["silver", "post_narrative_associations"]
+      - name: user_geolocations
+        meta:
+          dagster:
+            asset_key: ["silver", "user_geolocations"]

@@ -1,6 +1,6 @@
 with source as (
 
-    select * from {{ source('data_lake', 'conversation_classifications') }}
+    select * from {{ source('silver', 'conversation_classifications') }}
 
 ),
 

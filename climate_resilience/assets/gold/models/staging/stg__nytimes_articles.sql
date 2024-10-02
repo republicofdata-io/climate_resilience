@@ -2,7 +2,7 @@
 
 with source as (
 
-    select * from {{ source('data_lake', 'nytimes_articles') }}
+    select * from {{ source('bronze', 'nytimes_articles') }}
 
 ),
 
