@@ -1,0 +1,9 @@
+climate_resilience_gold:
+  target: gold
+  outputs:
+    gold:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+      dataset: "{{ env_var('BIGQUERY_GOLD_DATASET') }}"
+      threads: 1

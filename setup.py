@@ -2,12 +2,13 @@ from setuptools import find_packages, setup
 
 if __name__ == "__main__":
     setup(
-        name="climate_resilience_platform",
+        name="climate_resilience",
         packages=find_packages(),
         install_requires=[
             "dagster==1.8.8",
             "dagster-cloud==1.8.8",
             "dagster-dbt==0.24.8",
+            "dagster-hex==0.1.3",
             "dagster-gcp==0.24.8",
             "dagster-gcp-pandas==0.24.8",
             "dbt-bigquery==1.8.2",
