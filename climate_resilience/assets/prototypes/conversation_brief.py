@@ -1,9 +1,8 @@
-import json
 from datetime import datetime
 from typing import TypedDict
 
 import pandas as pd
-from dagster import AssetIn, MetadataValue, Output, TimeWindowPartitionMapping, asset
+from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 from dagster_hex.resources import DEFAULT_POLL_INTERVAL
 from dagster_hex.types import HexOutput
 
@@ -58,6 +57,9 @@ def investigative_reporter_ai_agent(
     partition_time_str = context.partition_key
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
+    context.log.info(f"Number of conversations: {len(x_conversations)}")
+    conversation_brief_outputs = []
+
     if not x_conversations.empty:
         # Initialize Hex client
         hex_client = hex_resource.create_client()
@@ -79,7 +81,11 @@ def investigative_reporter_ai_agent(
                 [f"- {tweet}" for tweet in conversation_list]
             )
 
-            if len(conversation_list) > 1:
+            context.log.info(
+                f"Number of posts for conversation {conversation['tweet_conversation_id']}: {len(conversation_list)}"
+            )
+
+            if len(conversation_list) >= 3:
                 context.log.info(
                     f"Launching Investigative Reporter AI Agent for conversation {conversation['tweet_conversation_id']}"
                 )
@@ -104,19 +110,11 @@ def investigative_reporter_ai_agent(
                     partition_time=partition_time,
                 )
 
-                yield Output(
-                    value=pd.DataFrame([conversation_brief_output]),
-                    metadata={
-                        "run_url": MetadataValue.url(hex_output.run_response["runUrl"]),
-                        "run_status_url": MetadataValue.url(
-                            hex_output.run_response["runStatusUrl"]
-                        ),
-                        "trace_id": MetadataValue.text(
-                            hex_output.run_response["traceId"]
-                        ),
-                        "run_id": MetadataValue.text(hex_output.run_response["runId"]),
-                        "elapsed_time": MetadataValue.int(
-                            hex_output.status_response["elapsedTime"]
-                        ),
-                    },
-                )
+                conversation_brief_outputs.append(conversation_brief_output)
+
+        yield Output(
+            value=pd.DataFrame(conversation_brief_outputs),
+            metadata={
+                "num_rows": str(len(conversation_brief_outputs)),
+            },
+        )
