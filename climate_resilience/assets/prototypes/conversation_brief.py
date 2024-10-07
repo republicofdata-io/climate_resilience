@@ -112,6 +112,7 @@ def investigative_reporter_ai_agent(
 
                 conversation_brief_outputs.append(conversation_brief_output)
 
+    if conversation_brief_outputs:
         yield Output(
             value=pd.DataFrame(conversation_brief_outputs),
             metadata={
