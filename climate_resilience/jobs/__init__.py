@@ -60,5 +60,6 @@ refresh_prototype_assets_job = define_asset_job(
     selection=AssetSelection.assets(
         AssetKey(["prototypes", "investigative_reporter_ai_agent"])
     ),
+    partitions_def=three_hour_partition_def,
     tags={"dagster/max_runtime": 30 * 60},
 )
