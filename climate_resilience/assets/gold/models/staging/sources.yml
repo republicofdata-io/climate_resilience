@@ -39,7 +39,7 @@ sources:
     schema: "{{ env_var('BIGQUERY_PROTOTYPES_DATASET') }}"
     tables:
       - name: conversation_briefs
-        identifer: investigative_report_ai_agent_output
+        identifier: investigative_report_ai_agent_output
         meta:
           dagster:
             asset_key: ["prototypes", "investigative_reporter_ai_agent"]
