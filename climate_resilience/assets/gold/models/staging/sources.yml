@@ -38,8 +38,8 @@ sources:
     database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
     schema: "{{ env_var('BIGQUERY_PROTOTYPES_DATASET') }}"
     tables:
-      - name: conversation_briefs
-        identifier: investigative_report_ai_agent_output
+      - name: conversation_event_summaries
+        identifier: conversation_event_summary_output
         meta:
           dagster:
-            asset_key: ["prototypes", "investigative_reporter_ai_agent"]
+            asset_key: ["prototypes", "conversation_event_summary"]

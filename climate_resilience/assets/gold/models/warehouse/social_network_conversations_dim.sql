@@ -20,7 +20,7 @@ final as (
         social_network_source,
         conversation_natural_key,
         classification,
-        brief,
+        event_summary,
         earliest_post_creation_ts,
     
     from s_social_network_conversations
