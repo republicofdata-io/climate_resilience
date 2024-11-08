@@ -1,6 +1,6 @@
 with source as (
 
-    select * from {{ source('prototypes', 'conversation_briefs') }}
+    select * from {{ source('prototypes', 'conversation_event_summaries') }}
 
 ),
 
@@ -12,7 +12,7 @@ base as (
         cast(completeness_assessment as boolean) as is_complete,
         cast(research_cycles as integer) as research_cycles,
         cast(research_findings as string) as research_findings,
-        cast(brief as string) as brief,
+        cast(event_summary as string) as event_summary,
 
     from source
 
@@ -26,7 +26,7 @@ dedup as (
             is_complete,
             research_cycles,
             research_findings,
-            brief,
+            event_summary,
             row_number() over (partition by conversation_natural_key order by conversation_natural_key) as row_number
     
         from base

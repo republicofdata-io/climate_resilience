@@ -10,9 +10,9 @@ s_conversation_classifications as (
 
 ),
 
-s_conversation_briefs as (
+s_conversation_event_summaries as (
 
-    select * from {{ ref('stg__conversation_briefs') }}
+    select * from {{ ref('stg__conversation_event_summaries') }}
 
 ),
 
@@ -36,15 +36,15 @@ merge_sources as (
   select 
     base.*,
     s_conversation_classifications.classification as classification,
-    s_conversation_briefs.brief,
+    s_conversation_event_summaries.event_summary
 
   from base
   left join s_conversation_classifications
       on base.conversation_natural_key = s_conversation_classifications.conversation_natural_key
       and base.social_network_source = s_conversation_classifications.social_network_source
-  left join s_conversation_briefs
-      on base.conversation_natural_key = s_conversation_briefs.conversation_natural_key
-      and base.social_network_source = s_conversation_briefs.social_network_source
+  left join s_conversation_event_summaries
+      on base.conversation_natural_key = s_conversation_event_summaries.conversation_natural_key
+      and base.social_network_source = s_conversation_event_summaries.social_network_source
 
 ),
 
@@ -57,7 +57,7 @@ dedup as (
         first_value(article_url ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as article_url,
         first_value(earliest_post_creation_ts ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as earliest_post_creation_ts,
         first_value(classification ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as classification,
-        first_value(brief ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as brief
+        first_value(event_summary ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as event_summary
 
     from merge_sources
 
