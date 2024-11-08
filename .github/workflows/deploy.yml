@@ -4,7 +4,7 @@ on:
     branches:
       - "main"
       - "master"
-    
+
 concurrency:
   # Cancel in-progress deploys to same branch
   group: ${{ github.ref }}/deploy
@@ -12,9 +12,9 @@ concurrency:
 env:
   DAGSTER_CLOUD_URL: "http://republicofdata-io.dagster.cloud"
   DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
-  ENABLE_FAST_DEPLOYS: 'false'
-  PYTHON_VERSION: '3.8'
-  DAGSTER_CLOUD_FILE: 'dagster_cloud.yaml'
+  ENABLE_FAST_DEPLOYS: "false"
+  PYTHON_VERSION: "3.8"
+  DAGSTER_CLOUD_FILE: "dagster_cloud.yaml"
 
 jobs:
   dagster_cloud_default_deploy:
@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-20.04
     outputs:
       build_info: ${{ steps.parse-workspace.outputs.build_info }}
-    
+
     steps:
       - name: Prerun Checks
         id: prerun
@@ -41,7 +41,12 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           path: project-repo
-          
+
+      - name: Upgrade pip
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        run: |
+          python -m pip install --upgrade pip
+
       - name: Python Executable Deploy
         if: steps.prerun.outputs.result == 'pex-deploy'
         uses: dagster-io/dagster-cloud-action/actions/build_deploy_python_executable@v0.1
@@ -77,4 +82,3 @@ jobs:
           organization_id: ${{ secrets.ORGANIZATION_ID }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
