@@ -6,3 +6,6 @@ The platform is built on a layered, modular architecture that emphasizes flexibi
 
 One of the key features of the platform is its ability to enrich data with geolocation mapping and narrative labeling. This allows for a more nuanced understanding of where climate stories are gaining traction and how public perception is shaped. The result is a data product that not only collects information but provides deeper insights into the climate discourse.
 
+## Entity Relationship Diagram
+
+![ERD](design/Climate-Resilience.png)

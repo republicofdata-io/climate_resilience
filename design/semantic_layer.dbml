@@ -1,0 +1,96 @@
+project climate_resilience {
+
+    database_type: 'bigquery'
+    note: '''
+        # RepublicOfData.io Climate Resilience data platform
+
+        columns are ordered by type, then mostly by alphabetical order.
+    '''
+}
+
+table media_articles_fct {
+
+    // join keys
+    media_article_pk varchar [pk, note: '''the primary key of the table''']
+
+    // unique identifier fields - regular
+    article_url varchar [note: '''the url of the article. example: 'https://www.bbc.co.uk/news/uk-12345678' ''']
+    media_source varchar [note: '''the source of the article. example: 'bbc' ''']
+
+    // strings
+    article_title varchar [note: '''the title of the article. example: 'The UK is going to the moon' ''']
+    article_summary varchar [note: '''a summary of the article. example: 'The UK is going to the moon, and it will be great' ''']
+    article_tags varchar [note: '''the tags of the article. example: 'uk, moon, great' ''']
+    article_author varchar [note: '''the author of the article. example: 'John Doe' ''']
+    article_medias varchar [note: '''the media attachments from this article. example: 'image1.jpg, image2.jpg' ''']
+
+    // timestamps
+    article_publication_ts timestamp [note: '''the publication timestamp of the article. example: '2021-01-01 12:00:00' ''']
+    article_modification_ts timestamp [note: '''the modification timestamp of the article. example: '2021-01-01 12:00:00' ''']
+}
+
+table social_network_conversations_dim {
+
+    // join keys
+    social_network_conversation_pk varchar [pk, note: '''the primary key of the table''']
+    media_article_fk varchar [ref: > media_articles_fct.media_article_pk, note: '''the foreign key of the media article table''']
+
+    // unique identifier fields - regular
+    social_network_source varchar [note: '''the name of the social network. example: 'twitter' ''']
+    conversation_natural_key varchar [note: '''the natural key of the conversation. example: '12345678' ''']
+    classification varchar [note: '''classification as to whether the conversation focuses on a climate issue or now''']
+    event_summary varchart [note: '''summary of the climate event being discussed''']
+
+    // timestamps
+    earliest_post_creation_ts timestamp [note: '''the earliest creation timestamp of a post associated to this conversation. example: '2021-01-01 12:00:00' ''']
+    
+}
+
+table social_network_posts_fct {
+
+    // join keys
+    social_network_post_pk varchar [pk, note: '''the primary key of the table''']
+    social_network_conversation_fk varchar [ref: > social_network_conversations_dim.social_network_conversation_pk, note: '''the primary key of the table''']
+    social_network_user_profile_fk varchar [ref: > social_network_user_profiles_dim.social_network_user_profile_pk, note: '''the primary key of the table''']
+
+    // unique identifier fields - regular
+    conversation_natural_key varchar [note: '''the natural key of the conversation. example: '12345678' ''']
+    social_network_source varchar [note: '''the name of the social network. example: 'twitter' ''']
+    post_natural_key varchar [note: '''the natural key of the post. example: '12345678' ''']
+
+    // strings
+    post_url varchar [note: '''the url of the post. example: 'https://twitter.com/johndoe/status/12345678' ''']
+    post_text varchar [note: '''the text of the post. example: 'The UK is going to the moon' ''']
+    discourse_type varchar [note: '''classification of discourse as whether it is biophysical, critical, dismissive or integrative.''']
+
+    // timestamps
+    post_creation_ts timestamp [note: '''the creation timestamp of the post. example: '2021-01-01 12:00:00' ''']
+    
+}
+
+table social_network_user_profiles_dim {
+
+    // join keys
+    social_network_user_profile_pk varchar [pk, note: '''the primary key of the table''']
+
+    // unique identifier fields - regular
+    social_network_source varchar [note: '''the name of the social network. example: 'twitter' ''']
+    social_network_profile_natural_key varchar [note: '''the natural key of the post author. example: '12345678' ''']
+
+    // strings
+    social_network_profile_username varchar [note: '''the author of the post. example: 'John Doe' ''']
+    social_network_profile_description varchar [note: '''the description of the post author. example: 'I am a great person' ''']
+    social_network_profile_location_name varchar [note: '''the location of the post author. example: 'London' ''']
+    social_network_profile_location_country_name varchar [note: '''the country name of the post author. example: 'United Kingdom' ''']
+    social_network_profile_location_country_code varchar [note: '''the country code of the post author. example: 'UK' ''']
+    social_network_profile_location_admin_name1 varchar [note: '''the admin1 name of the post author. example: 'England' ''']
+    social_network_profile_location_admin_code1 varchar [note: '''the admin1 code of the post author. example: 'ENG' ''']
+    social_network_profile_location_latitude numeric [note: '''the latitude of the post author. example: 51.5074''']
+    social_network_profile_location_longitude numeric [note: '''the longitude of the post author. example: -0.1278''']
+    social_network_profile_location_h3_r3 varchar [note: '''the h3 geographical cell (at resolution 3) of the post author.''']
+
+    // timestamps
+    social_network_profile_creation_ts timestamp [note: '''the creation timestamp of the post author. example: '2021-01-01 12:00:00' ''']
+    
+}
+
