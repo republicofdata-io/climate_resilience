@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import TypedDict
 
 import pandas as pd
 import requests
@@ -9,6 +10,21 @@ from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 from ...partitions import three_hour_partition_def
 
 spacy.cli.download("en_core_web_sm")
+
+
+class SocialNetworkUserProfileGeolocation(TypedDict):
+    social_network_profile_id: str
+    social_network_profile_username: str
+    location_order: int
+    location: str
+    countryName: str
+    countryCode: str
+    adminName1: str
+    adminCode1: str
+    latitude: str
+    longitude: str
+    geolocation_ts: datetime
+    partition_hour_utc_ts: datetime
 
 
 # Geocode locations using GeoNames
@@ -64,19 +80,6 @@ def most_precise_location(group):
     compute_kind="python",
 )
 def user_geolocations(context, x_conversations, x_conversation_posts):
-    social_network_user_geolocations_columns = {
-        "social_network_profile_id": "string",
-        "social_network_profile_username": "string",
-        "location_order": "int64",
-        "location": "string",
-        "countryName": "string",
-        "countryCode": "string",
-        "adminName1": "string",
-        "adminCode1": "string",
-        "latitude": "string",
-        "longitude": "string",
-        "geolocation_ts": "datetime64[ns]",
-    }
     # Log upstream asset's partition keys
     context.log.info(
         f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
@@ -90,11 +93,7 @@ def user_geolocations(context, x_conversations, x_conversation_posts):
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
     # Initialize DataFrame that will hold geolocation data of social network user's profile location
-    social_network_user_profile_geolocations_df = (
-        pd.DataFrame()
-        .reindex(columns=social_network_user_geolocations_columns.keys())
-        .astype(social_network_user_geolocations_columns)
-    )
+    social_network_user_geolocations = []
 
     # Concatenate the social network posts
     social_network_posts = pd.concat(
@@ -120,35 +119,28 @@ def user_geolocations(context, x_conversations, x_conversation_posts):
             for location in locations:
                 geocoded_location_data = geocode(location)
 
-                data = {
-                    "social_network_profile_id": [row["author_id"]],
-                    "social_network_profile_username": [row["author_username"]],
-                    "location_order": [locations.index(location)],
-                    "location": [location],
-                    "countryName": [geocoded_location_data.get("countryName", "")],
-                    "countryCode": [geocoded_location_data.get("countryCode", "")],
-                    "adminName1": [geocoded_location_data.get("adminName1", "")],
-                    "adminCode1": [geocoded_location_data.get("adminCode1", "")],
-                    "latitude": [geocoded_location_data.get("lat", "")],
-                    "longitude": [geocoded_location_data.get("lng", "")],
-                    "geolocation_ts": [datetime.now()],
-                }
-                geolocations_df = pd.DataFrame(data).astype(
-                    social_network_user_geolocations_columns
-                )
-
-                # Concatenate the DataFrames
-                social_network_user_profile_geolocations_df = pd.concat(
-                    [social_network_user_profile_geolocations_df, geolocations_df],
-                    ignore_index=True,
+                social_network_user_geolocations.append(
+                    SocialNetworkUserProfileGeolocation(
+                        social_network_profile_id=row["author_id"],
+                        social_network_profile_username=row["author_username"],
+                        location_order=locations.index(location),
+                        location=location,
+                        countryName=geocoded_location_data.get("countryName", ""),
+                        countryCode=geocoded_location_data.get("countryCode", ""),
+                        adminName1=geocoded_location_data.get("adminName1", ""),
+                        adminCode1=geocoded_location_data.get("adminCode1", ""),
+                        latitude=geocoded_location_data.get("lat", ""),
+                        longitude=geocoded_location_data.get("lng", ""),
+                        geolocation_ts=datetime.now(),
+                        partition_hour_utc_ts=partition_time,
+                    )
                 )
 
         except Exception as e:
             print(f"Error geolocating {row['article_url']}: {e}")
 
-    # Add partition_hour_utc_ts as a new field to the DataFrame
-    social_network_user_profile_geolocations_df["partition_hour_utc_ts"] = (
-        partition_time
+    social_network_user_profile_geolocations_df = pd.DataFrame(
+        social_network_user_geolocations
     )
 
     # Deduplicate the DataFrame by social_network_profile_id and by keeping the hightest level of precision
