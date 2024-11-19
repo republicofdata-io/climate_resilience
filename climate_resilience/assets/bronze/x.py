@@ -84,6 +84,7 @@ def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwa
 
     # Create an empty DataFrame that will hold all conversations
     conversations_df = pd.DataFrame()
+    conversations_df = pd.DataFrame(columns=Post.__annotations__.keys())
 
     # Iterate over the articles and search for tweets that mention the article
     failure_count = 0
@@ -204,10 +205,7 @@ def x_conversation_posts(
 
     # Create an empty DataFrame with the specified columns and data types
     conversation_posts_df = pd.DataFrame()
-    conversation_posts_df = conversation_posts_df.reindex(
-        columns=list(post_columns.keys())
-    )
-    conversation_posts_df = conversation_posts_df.astype(post_columns)
+    conversation_posts_df = pd.DataFrame(columns=Post.__annotations__.keys())
 
     # Deduplicate the x_conversations DataFrame
     x_conversations = x_conversations.drop_duplicates(subset=["tweet_conversation_id"])
@@ -215,10 +213,7 @@ def x_conversation_posts(
 
     # Get latest metrics for the conversations Create an empty DataFrame with the specified columns and data types
     conversation_metrics_df = pd.DataFrame()
-    conversation_metrics_df = conversation_metrics_df.reindex(
-        columns=list(post_columns.keys())
-    )
-    conversation_metrics_df = conversation_metrics_df.astype(post_columns)
+    conversation_metrics_df = pd.DataFrame(columns=Post.__annotations__.keys())
 
     # Batch requests in groups of 100
     for i in range(0, len(x_conversations), 100):
@@ -284,9 +279,9 @@ def x_conversation_posts(
     index = 0
 
     while index < len(active_conversations_df):
-        row = active_conversations_df.iloc[index]
+        article_row = active_conversations_df.iloc[index]
         try:
-            search_term = f'conversation_id:{row["tweet_conversation_id"]} -RT -is:retweet lang:en'
+            search_term = f'conversation_id:{article_row["tweet_conversation_id"]} -RT -is:retweet lang:en'
 
             # Get posts that are replies to the conversation and log consumption to table
             x_conversation_posts = x_resource.search(
@@ -296,33 +291,41 @@ def x_conversation_posts(
                 end_time=end_time,
             )
 
-            # Add article URL to the DataFrame
-            x_conversation_posts["article_url"] = row["article_url"]
+            posts: List[Post] = []
 
-            # Remove timezone information from timestamp
-            x_conversation_posts["tweet_created_at"] = pd.to_datetime(
-                x_conversation_posts["tweet_created_at"]
-            ).dt.tz_localize(None)
+            for _, post_row in x_conversation_posts.iterrows():
+                post: Post = {
+                    "article_url": article_row["article_url"],
+                    "tweet_id": str(post_row["tweet_id"]),
+                    "tweet_created_at": pd.to_datetime(
+                        post_row["tweet_created_at"]
+                    ).tz_localize(None),
+                    "tweet_conversation_id": str(post_row["tweet_conversation_id"]),
+                    "tweet_text": post_row["tweet_text"],
+                    "tweet_public_metrics": post_row["tweet_public_metrics"],
+                    "author_id": str(post_row["author_id"]),
+                    "author_username": post_row["author_username"],
+                    "author_location": post_row.get(
+                        "author_location", ""
+                    ),  # Default to empty string
+                    "author_description": post_row.get(
+                        "author_description", ""
+                    ),  # Default to empty string
+                    "author_created_at": pd.to_datetime(
+                        post_row["author_created_at"]
+                    ).tz_localize(None),
+                    "author_public_metrics": post_row["author_public_metrics"],
+                    "partition_hour_utc_ts": partition_time,
+                    "record_loading_ts": datetime.now(),
+                }
+                posts.append(post)
 
-            x_conversation_posts["author_created_at"] = pd.to_datetime(
-                x_conversation_posts["author_created_at"]
-            ).dt.tz_localize(None)
+            # Convert the list of Post dictionaries to a DataFrame
+            x_conversation_posts = pd.DataFrame(posts)
 
-            # Add partition_hour_utc_ts and current timestamp as new fields to the DataFrame
-            x_conversation_posts["partition_hour_utc_ts"] = partition_time.strftime(
-                "%Y-%m-%dT%H:%M:%S"
-            )
-
-            x_conversation_posts["record_loading_ts"] = datetime.now().strftime(
-                "%Y-%m-%dT%H:%M:%S"
-            )
-
-            # Concatenate the new x_conversation_posts to the DataFrame
+            # Concatenate the new x_posts to the DataFrame
             conversation_posts_df = pd.concat(
-                [
-                    conversation_posts_df,
-                    x_conversation_posts.astype(post_columns),
-                ]
+                [conversation_posts_df, x_conversation_posts], ignore_index=True
             )
 
             # Reset failure count on success
