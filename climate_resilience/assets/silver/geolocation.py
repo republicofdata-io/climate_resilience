@@ -77,6 +77,7 @@ def most_precise_location(group):
     },
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
+    output_required=False,
     compute_kind="python",
 )
 def user_geolocations(context, x_conversations, x_conversation_posts):
@@ -139,23 +140,24 @@ def user_geolocations(context, x_conversations, x_conversation_posts):
         except Exception as e:
             print(f"Error geolocating {row['article_url']}: {e}")
 
-    social_network_user_profile_geolocations_df = pd.DataFrame(
-        social_network_user_geolocations
-    )
-
-    # Deduplicate the DataFrame by social_network_profile_id and by keeping the hightest level of precision
-    social_network_user_profile_geolocations_df = (
-        social_network_user_profile_geolocations_df.groupby(
-            "social_network_profile_id", as_index=False
+    if social_network_user_geolocations:
+        social_network_user_profile_geolocations_df = pd.DataFrame(
+            social_network_user_geolocations
         )
-        .apply(most_precise_location)
-        .reset_index(drop=True)
-    )
 
-    # Return asset
-    yield Output(
-        value=social_network_user_profile_geolocations_df,
-        metadata={
-            "num_rows": social_network_user_profile_geolocations_df.shape[0],
-        },
-    )
+        # Deduplicate the DataFrame by social_network_profile_id and by keeping the hightest level of precision
+        social_network_user_profile_geolocations_df = (
+            social_network_user_profile_geolocations_df.groupby(
+                "social_network_profile_id", as_index=False
+            )
+            .apply(most_precise_location)
+            .reset_index(drop=True)
+        )
+
+        # Return asset
+        yield Output(
+            value=social_network_user_profile_geolocations_df,
+            metadata={
+                "num_rows": social_network_user_profile_geolocations_df.shape[0],
+            },
+        )
