@@ -65,7 +65,9 @@ def conversation_classifications(
 
     if not x_conversations.empty:
         # Assemble full conversations
-        conversations_df = assemble_conversations(x_conversations, x_conversation_posts)
+        conversations_df = assemble_conversations(
+            context, conversations=x_conversations, posts=x_conversation_posts
+        )
 
         # Group by tweet_conversation_id and aggregate tweet_texts into a list ordered by tweet_created_at
         conversations_df = (
@@ -170,9 +172,9 @@ def post_narrative_associations(
         # Assemble full conversations
         conversations_df = assemble_conversations(
             context,
-            x_conversations,
-            x_conversation_posts,
-            conversation_classifications,
+            conversations=x_conversations,
+            posts=x_conversation_posts,
+            classifications=conversation_classifications,
         )
 
         # Iterate over all conversations and classify them
