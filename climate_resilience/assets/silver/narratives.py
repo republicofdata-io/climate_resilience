@@ -139,6 +139,7 @@ def conversation_classifications(
     },
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_time"},
+    output_required=False,
     compute_kind="LangGraph",
 )
 def post_narrative_associations(
@@ -163,15 +164,12 @@ def post_narrative_associations(
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
     # Initialize DataFrame to store classifications
-    post_associations_df = pd.DataFrame()
-    post_associations_df = post_associations_df.reindex(
-        columns=list(post_association_columns.keys())
-    )
-    post_associations_df = post_associations_df.astype(post_association_columns)
+    post_associations = []
 
     if not x_conversations.empty:
         # Assemble full conversations
         conversations_df = assemble_conversations(
+            context,
             x_conversations,
             x_conversation_posts,
             conversation_classifications,
@@ -190,25 +188,26 @@ def post_narrative_associations(
                 context.log.info(f"Associations: {post_associations_output}")
 
                 for association in post_associations_output.post_associations:
-                    new_row = {
-                        "post_id": association.post_id,
-                        "discourse_type": association.discourse,
-                    }
-                    post_associations_df = pd.concat(
-                        [post_associations_df, pd.DataFrame([new_row])],
-                        ignore_index=True,
+                    post_associations.append(
+                        PostAssociation(
+                            post_id=association.post_id,
+                            discourse_type=association.discourse,
+                            partition_time=partition_time,
+                        )
                     )
+
             except Exception as e:
                 print(f"Failed to associate posts")
                 print(e)
 
-        # Append partition time to DataFrame
-        post_associations_df["partition_time"] = partition_time
+    if post_associations:
+        # Convert list of associations to DataFrame
+        post_associations_df = pd.DataFrame(post_associations)
 
-    # Return asset
-    yield Output(
-        value=post_associations_df,
-        metadata={
-            "num_rows": post_associations_df.shape[0],
-        },
-    )
+        # Return asset
+        yield Output(
+            value=post_associations_df,
+            metadata={
+                "num_rows": post_associations_df.shape[0],
+            },
+        )
