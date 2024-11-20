@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import Optional, TypedDict
 
 import feedparser
 import pandas as pd
@@ -8,17 +9,18 @@ from dagster import AssetExecutionContext, AssetsDefinition, Output, asset
 from ...partitions import hourly_partition_def
 from ...resources import SupabaseResource
 
-media_article_columns = {
-    "media": "string",
-    "id": "string",
-    "title": "string",
-    "link": "string",
-    "summary": "string",
-    "author": "string",
-    "tags": "string",
-    "medias": "string",
-    "published_ts": "datetime64[ns]",
-}
+
+class MediaArticle(TypedDict):
+    media: str
+    id: str
+    title: str
+    link: str
+    summary: Optional[str]
+    author: str
+    tags: str
+    medias: str
+    published_ts: datetime
+
 
 # Get media feeds
 supabase_resource = SupabaseResource(
@@ -64,21 +66,23 @@ def build_media_feed_assets(
 
             # If categories is None or the article matches the categories, include it
             articles.append(
-                {
-                    "media": slug,
-                    "id": entry.id,
-                    "title": entry.title,
-                    "link": entry.link,
-                    "summary": entry.summary,
-                    "author": entry.author if "author" in entry else None,
-                    "tags": [tag.term for tag in getattr(entry, "tags", [])],
-                    "medias": (
-                        [content["url"] for content in entry.media_content]
+                MediaArticle(
+                    media=slug,
+                    id=entry.id,
+                    title=entry.title,
+                    link=entry.link,
+                    summary=entry.summary,
+                    author=entry.author if "author" in entry else None,
+                    tags=",".join(
+                        [tag.term for tag in entry.tags] if "tags" in entry else []
+                    ),
+                    medias=",".join(
+                        [media["url"] for media in entry.media_content]
                         if "media_content" in entry
                         else []
                     ),
-                    "published_ts": entry.published,
-                }
+                    published_ts=entry.published,
+                )
             )
 
         if articles:
@@ -87,7 +91,6 @@ def build_media_feed_assets(
             articles_df["published_ts"] = pd.to_datetime(
                 articles_df["published_ts"], format="%a, %d %b %Y %H:%M:%S %z"
             ).dt.tz_localize(None)
-            articles_df = articles_df.astype(media_article_columns)
 
             # Keep articles that are within the partition's time
             articles_df = articles_df[

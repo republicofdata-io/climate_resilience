@@ -3,7 +3,7 @@ import re
 import pandas as pd
 
 
-def assemble_conversations(conversations, posts, classifications=None):
+def assemble_conversations(context, conversations, posts, classifications=None):
     # Assemble full conversations
     assembled_conversations = (
         (
@@ -46,7 +46,7 @@ def assemble_conversations(conversations, posts, classifications=None):
         ).drop(columns=["conversation_id", "partition_time"])
 
         assembled_conversations = assembled_conversations[
-            assembled_conversations["classification"]
+            assembled_conversations["classification"].astype(bool)
         ]
 
     return assembled_conversations
