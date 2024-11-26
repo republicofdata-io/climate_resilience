@@ -196,8 +196,6 @@ def post_narrative_associations(
         else:
             event_summary_df = job.to_dataframe()
 
-    context.log.info(event_summary_df)
-
     if not x_conversations.empty:
         # Assemble full conversations
         conversations_df = assemble_conversations(
@@ -207,25 +205,27 @@ def post_narrative_associations(
             classifications=conversation_classifications,
             event_summary=event_summary_df,
         )
-        context.log.info(conversations_df)
 
         # Iterate over all conversations and classify them
-        for _, conversation_df in conversations_df.iterrows():
-            conversation_dict = conversation_df.to_dict()
-            conversation_json = json.dumps(conversation_dict)
-            context.log.info(f"Classifying conversation: {conversation_json}")
+        for _, conversation_post in conversations_df.iterrows():
+            conversation_post_dict = conversation_post.to_dict()
+            conversation_post_json = json.dumps(conversation_post_dict)
+            context.log.info(
+                f"Associate discourse type and extract narrative for the following post: {conversation_post_json}"
+            )
 
             try:
-                post_associations_output = post_association_agent.invoke(
-                    {"conversation_posts_json": conversation_json}
+                post_association_output = post_association_agent.invoke(
+                    {"conversation_post_json": conversation_post_json}
                 )
-                context.log.info(f"Associations: {post_associations_output}")
+                context.log.info(f"Output: {post_association_output}")
 
-                for association in post_associations_output.post_associations:
+                for association in post_association_output.post_associations:
                     post_associations.append(
                         PostAssociation(
                             post_id=association.post_id,
                             discourse_type=association.discourse,
+                            narrative=association.narrative,
                             partition_time=partition_time,
                         )
                     )
