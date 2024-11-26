@@ -1,9 +1,12 @@
 import json
+import os
 from datetime import datetime
 from typing import TypedDict
 
 import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
+from dagster_gcp import BigQueryResource
+from google.api_core.exceptions import GoogleAPIError
 
 from ...agents import conversation_classification_agent, post_association_agent
 from ...partitions import three_hour_partition_def
@@ -140,7 +143,7 @@ def conversation_classifications(
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=0),
         ),
         "conversation_event_summary": AssetIn(
-            key=["prototype", "conversation_event_summary"],
+            key=["prototypes", "conversation_event_summary"],
         ),
     },
     partitions_def=three_hour_partition_def,
@@ -177,18 +180,34 @@ def post_narrative_associations(
     # Initialize DataFrame to store classifications
     post_associations = []
 
-    # TODO: Fetch all event summaries from the conversations in x_conversations
+    # Fetch all event summaries from the conversations in x_conversations
+    sql = f"""
+    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_PROTOTYPES_DATASET")}.conversation_event_summary_output
+    where conversation_natural_key in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
+    """
+
+    with gcp_resource.get_client() as client:
+        job = client.query(sql)
+        job.result()  # Wait for the job to complete
+
+        if job.error_result:
+            error_message = job.error_result.get("message", "Unknown error")
+            raise GoogleAPIError(f"BigQuery job failed: {error_message}")
+        else:
+            event_summary_df = job.to_dataframe()
+
+    context.log.info(event_summary_df)
 
     if not x_conversations.empty:
         # Assemble full conversations
-        # TODO: Add event summary to conversations
         conversations_df = assemble_conversations(
             context,
             conversations=x_conversations,
             posts=x_conversation_posts,
             classifications=conversation_classifications,
-            event_summary=conversation_event_summary,
+            event_summary=event_summary_df,
         )
+        context.log.info(conversations_df)
 
         # Iterate over all conversations and classify them
         for _, conversation_df in conversations_df.iterrows():
@@ -197,7 +216,6 @@ def post_narrative_associations(
             context.log.info(f"Classifying conversation: {conversation_json}")
 
             try:
-                # TODO: Refactor agent
                 post_associations_output = post_association_agent.invoke(
                     {"conversation_posts_json": conversation_json}
                 )
