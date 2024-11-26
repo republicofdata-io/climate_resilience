@@ -19,6 +19,7 @@ class ConversationClassification(TypedDict):
 class PostAssociation(TypedDict):
     post_id: str
     discourse_type: str
+    narrative: str
     partition_time: datetime
 
 
@@ -138,6 +139,9 @@ def conversation_classifications(
             key=["silver", "conversation_classifications"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=0),
         ),
+        "conversation_event_summary": AssetIn(
+            key=["prototype", "conversation_event_summary"],
+        ),
     },
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_time"},
@@ -149,6 +153,8 @@ def post_narrative_associations(
     x_conversations,
     x_conversation_posts,
     conversation_classifications,
+    conversation_event_summary,
+    gcp_resource: BigQueryResource,
 ):
     # Log upstream asset's partition keys
     context.log.info(
@@ -160,6 +166,9 @@ def post_narrative_associations(
     context.log.info(
         f"Partition key range for conversation_classifications: {context.asset_partition_key_range_for_input('conversation_classifications')}"
     )
+    context.log.info(
+        f"Partition key range for conversation_event_summary: {context.asset_partition_key_range_for_input('conversation_event_summary')}"
+    )
 
     # Get partition's time
     partition_time_str = context.partition_key
@@ -168,13 +177,17 @@ def post_narrative_associations(
     # Initialize DataFrame to store classifications
     post_associations = []
 
+    # TODO: Fetch all event summaries from the conversations in x_conversations
+
     if not x_conversations.empty:
         # Assemble full conversations
+        # TODO: Add event summary to conversations
         conversations_df = assemble_conversations(
             context,
             conversations=x_conversations,
             posts=x_conversation_posts,
             classifications=conversation_classifications,
+            event_summary=conversation_event_summary,
         )
 
         # Iterate over all conversations and classify them
@@ -184,6 +197,7 @@ def post_narrative_associations(
             context.log.info(f"Classifying conversation: {conversation_json}")
 
             try:
+                # TODO: Refactor agent
                 post_associations_output = post_association_agent.invoke(
                     {"conversation_posts_json": conversation_json}
                 )
