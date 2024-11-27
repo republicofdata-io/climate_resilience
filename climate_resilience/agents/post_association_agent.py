@@ -29,7 +29,7 @@ class PostAssociations(BaseModel):
 @traceable
 def initiate_post_association_agent():
     # Components
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatOpenAI(model="gpt-4o-mini")
     parser = PydanticOutputParser(pydantic_object=PostAssociations)
 
     # Prompt
