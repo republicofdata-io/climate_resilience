@@ -11,6 +11,7 @@ base as (
         'x' as social_network_source,
         
         cast(discourse_type as string) as discourse_type,
+        cast(narrative as string) as narrative,
         cast(partition_time as timestamp) as discourse_type_partition_ts,
     
     from source

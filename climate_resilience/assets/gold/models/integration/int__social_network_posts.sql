@@ -84,6 +84,7 @@ final as (
     select
         dedup.*,
         s_post_narrative_associations.discourse_type,
+        s_post_narrative_associations.narrative
 
     from dedup
     left join s_post_narrative_associations
