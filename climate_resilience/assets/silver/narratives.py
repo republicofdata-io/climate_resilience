@@ -196,6 +196,8 @@ def post_narrative_associations(
         else:
             event_summary_df = job.to_dataframe()
 
+    context.log.info(f"Number of event summaries fetched: {event_summary_df.shape[0]}")
+
     if not x_conversations.empty:
         # Assemble full conversations
         conversations_df = assemble_conversations(
@@ -204,6 +206,9 @@ def post_narrative_associations(
             posts=x_conversation_posts,
             classifications=conversation_classifications,
             event_summary=event_summary_df,
+        )
+        context.log.info(
+            f"Associating discourse type and extracting narrative for {len(conversations_df)} social network conversation posts."
         )
 
         # Iterate over all conversations and classify them
