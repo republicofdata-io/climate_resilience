@@ -14,6 +14,9 @@ class PostAssociation(BaseModel):
     post_id: str = Field(description="A post's id")
     text: str = Field(description="A post's text")
     discourse: str = Field(description="The associated discourse's label")
+    narrative: str = Field(
+        description="A description of the discourse underlying the post, in the context of the climate change event being discussed"
+    )
 
 
 class PostAssociations(BaseModel):
@@ -26,21 +29,22 @@ class PostAssociations(BaseModel):
 @traceable
 def initiate_post_association_agent():
     # Components
-    model = ChatOpenAI(model="gpt-4o")
+    model = ChatOpenAI(model="gpt-4o-mini")
     parser = PydanticOutputParser(pydantic_object=PostAssociations)
 
     # Prompt
     system_template = """
     # IDENTITY and PURPOSE 
-    You are an expert at associating discourse types to social network posts.
+    You are an expert at analyzing discourses from social network posts.
 
     # STEPS
-    1. Ingest the first json object which has all the posts from a social network conversation on climate change.
-    2. Consider the discourse type definitions provided below.
-    3. Take your time to process all those entries.
-    4. Parse all posts and associate the most appropriate discourse type to each individual post.
+    1. Ingest a json object which has a post from a social network conversation discussing a climate event.
+    2. Take into consideration the climate event summary as the context for that post.
+    3. Consider the discourse type definitions provided below.
+    4. Associate the most appropriate discourse type to this post.
     5. It's important that if no discourse is relevant, the post should be classified as N/A.
-    5. Each association should have the post's text and the discourse's label.
+    6. Provide a narrative that describes the discourse underlying the post in the context of the climate change event being discussed.
+    7. Each association should have the post's id, text, the discourse's label and narrative description.
 
     # DISCOURSE TYPES
     1. Biophysical: "Climate change is an environmental problem caused by rising concentrations of greenhouse gases from human activities. Climate change can be addressed through policies, technologies, and behavioural changes that reduce greehouse gas emissions and support adaptation."
@@ -58,7 +62,7 @@ def initiate_post_association_agent():
             ("system", system_template),
             (
                 "human",
-                "Here's a json object which has all the posts from a social network conversation on climate change: {conversation_posts_json}",
+                "Here's a json object which has a post from a social network conversation discussing a climate change event: {conversation_post_json}",
             ),
         ]
     ).partial(format_instructions=parser.get_format_instructions())

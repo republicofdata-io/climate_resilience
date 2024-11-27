@@ -3,7 +3,9 @@ import re
 import pandas as pd
 
 
-def assemble_conversations(context, conversations, posts, classifications=None):
+def assemble_conversations(
+    context, conversations, posts, classifications=None, event_summary=None
+):
     # Assemble full conversations
     assembled_conversations = (
         (
@@ -48,5 +50,14 @@ def assemble_conversations(context, conversations, posts, classifications=None):
         assembled_conversations = assembled_conversations[
             assembled_conversations["classification"].astype(bool)
         ]
+
+    # Add event summary to conversations if provided
+    if event_summary is not None:
+        assembled_conversations = pd.merge(
+            assembled_conversations,
+            event_summary,
+            left_on="tweet_conversation_id",
+            right_on="conversation_natural_key",
+        )
 
     return assembled_conversations

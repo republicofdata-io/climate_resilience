@@ -22,7 +22,13 @@ from .jobs import (
     refresh_social_network_conversation_assets_job,
     refresh_social_network_post_assets_job,
 )
-from .resources import dbt_resource, hex_resource, supabase_resource, x_resource
+from .resources import (
+    dbt_resource,
+    gcp_resource,
+    hex_resource,
+    supabase_resource,
+    x_resource,
+)
 from .schedules import (
     refresh_gold_assets_schedule,
     refresh_media_assets_schedule,
@@ -65,6 +71,7 @@ defs = Definitions(
         "gold_io_manager": gold_io_manager,
         "prototypes_io_manager": prototypes_io_manager,
         "dbt_resource": dbt_resource,
+        "gcp_resource": gcp_resource,
         "hex_resource": hex_resource,
         "supabase_resource": supabase_resource,
         "x_resource": x_resource,

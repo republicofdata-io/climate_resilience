@@ -1,9 +1,12 @@
 import json
+import os
 from datetime import datetime
 from typing import TypedDict
 
 import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
+from dagster_gcp import BigQueryResource
+from google.api_core.exceptions import GoogleAPIError
 
 from ...agents import conversation_classification_agent, post_association_agent
 from ...partitions import three_hour_partition_def
@@ -19,6 +22,7 @@ class ConversationClassification(TypedDict):
 class PostAssociation(TypedDict):
     post_id: str
     discourse_type: str
+    narrative: str
     partition_time: datetime
 
 
@@ -138,6 +142,9 @@ def conversation_classifications(
             key=["silver", "conversation_classifications"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=0),
         ),
+        "conversation_event_summary": AssetIn(
+            key=["prototypes", "conversation_event_summary"],
+        ),
     },
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_time"},
@@ -149,6 +156,8 @@ def post_narrative_associations(
     x_conversations,
     x_conversation_posts,
     conversation_classifications,
+    conversation_event_summary,
+    gcp_resource: BigQueryResource,
 ):
     # Log upstream asset's partition keys
     context.log.info(
@@ -160,6 +169,9 @@ def post_narrative_associations(
     context.log.info(
         f"Partition key range for conversation_classifications: {context.asset_partition_key_range_for_input('conversation_classifications')}"
     )
+    context.log.info(
+        f"Partition key range for conversation_event_summary: {context.asset_partition_key_range_for_input('conversation_event_summary')}"
+    )
 
     # Get partition's time
     partition_time_str = context.partition_key
@@ -168,6 +180,22 @@ def post_narrative_associations(
     # Initialize DataFrame to store classifications
     post_associations = []
 
+    # Fetch all event summaries from the conversations in x_conversations
+    sql = f"""
+    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_PROTOTYPES_DATASET")}.conversation_event_summary_output
+    where conversation_natural_key in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
+    """
+
+    with gcp_resource.get_client() as client:
+        job = client.query(sql)
+        job.result()  # Wait for the job to complete
+
+        if job.error_result:
+            error_message = job.error_result.get("message", "Unknown error")
+            raise GoogleAPIError(f"BigQuery job failed: {error_message}")
+        else:
+            event_summary_df = job.to_dataframe()
+
     if not x_conversations.empty:
         # Assemble full conversations
         conversations_df = assemble_conversations(
@@ -175,25 +203,29 @@ def post_narrative_associations(
             conversations=x_conversations,
             posts=x_conversation_posts,
             classifications=conversation_classifications,
+            event_summary=event_summary_df,
         )
 
         # Iterate over all conversations and classify them
-        for _, conversation_df in conversations_df.iterrows():
-            conversation_dict = conversation_df.to_dict()
-            conversation_json = json.dumps(conversation_dict)
-            context.log.info(f"Classifying conversation: {conversation_json}")
+        for _, conversation_post in conversations_df.iterrows():
+            conversation_post_dict = conversation_post.to_dict()
+            conversation_post_json = json.dumps(conversation_post_dict)
+            context.log.info(
+                f"Associate discourse type and extract narrative for the following post: {conversation_post_json}"
+            )
 
             try:
-                post_associations_output = post_association_agent.invoke(
-                    {"conversation_posts_json": conversation_json}
+                post_association_output = post_association_agent.invoke(
+                    {"conversation_post_json": conversation_post_json}
                 )
-                context.log.info(f"Associations: {post_associations_output}")
+                context.log.info(f"Output: {post_association_output}")
 
-                for association in post_associations_output.post_associations:
+                for association in post_association_output.post_associations:
                     post_associations.append(
                         PostAssociation(
                             post_id=association.post_id,
                             discourse_type=association.discourse,
+                            narrative=association.narrative,
                             partition_time=partition_time,
                         )
                     )

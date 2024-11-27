@@ -29,6 +29,7 @@ final as (
         post_url,
         post_text,
         discourse_type,
+        narrative,
 
         post_creation_ts
     
