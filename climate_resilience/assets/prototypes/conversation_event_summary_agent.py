@@ -86,7 +86,7 @@ def conversation_event_summary(
                 f"Number of posts for conversation {conversation['tweet_conversation_id']}: {len(conversation_list)}"
             )
 
-            if len(conversation_list) >= 3:
+            if len(conversation_list) >= 2:
                 context.log.info(
                     f"Launching Investigative Reporter AI Agent for conversation {conversation['tweet_conversation_id']}"
                 )
