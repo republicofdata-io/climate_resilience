@@ -185,6 +185,7 @@ def post_narrative_associations(
     select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_PROTOTYPES_DATASET")}.conversation_event_summary_output
     where conversation_natural_key in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
     """
+    context.log.info(f"Fetching event summaries from BigQuery: {sql}")
 
     with gcp_resource.get_client() as client:
         job = client.query(sql)
