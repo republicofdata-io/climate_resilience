@@ -24,14 +24,14 @@ refresh_media_assets_schedule = build_schedule_from_partitioned_job(
 refresh_social_network_conversation_assets_schedule = (
     build_schedule_from_partitioned_job(
         refresh_social_network_conversation_assets_job,
-        minute_of_hour=15,
+        minute_of_hour=10,
     )
 )
 
 
 @schedule(
     job=refresh_social_network_post_assets_job,
-    cron_schedule="30 */3 * * *",
+    cron_schedule="20 */3 * * *",
 )
 def refresh_social_network_post_assets_schedule(context):
     execution_time = context.scheduled_execution_time
@@ -55,7 +55,7 @@ def refresh_narrative_assets_schedule(context):
 
 @schedule(
     job=refresh_prototype_assets_job,
-    cron_schedule="45 */3 * * *",
+    cron_schedule="30 */3 * * *",
 )
 def refresh_prototype_assets_schedule(context):
     execution_time = context.scheduled_execution_time
