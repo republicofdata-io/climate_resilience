@@ -1,27 +1,28 @@
 from datetime import datetime
-from typing import TypedDict
 
 import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
-from dagster_hex.resources import DEFAULT_POLL_INTERVAL
-from dagster_hex.types import HexOutput
+from typing_extensions import Optional, TypedDict
 
+from ...agents import conversation_event_summary_agent
 from ...partitions import three_hour_partition_def
-from ...resources.hex_resource import ConfigurableHexResource
 
 
-class EventSummary(TypedDict):
-    conversation_id: str
-    run_id: str
-    run_url: str
-    trace_id: str
-    partition_time: datetime
+class Conversation(TypedDict):
+    id: str
+    conversation: str
+
+
+class Article(TypedDict):
+    url: Optional[str]
+    title: Optional[str]
+    summary: Optional[str]
 
 
 @asset(
     name="conversation_event_summary",
     description="Summary of the event discussed in a conversation",
-    io_manager_key="prototypes_io_manager",
+    io_manager_key="silver_io_manager",
     ins={
         "articles": AssetIn(
             key=["bronze", "nytimes_articles"],
@@ -43,11 +44,10 @@ class EventSummary(TypedDict):
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_time"},
     output_required=False,
-    compute_kind="Hex",
+    compute_kind="LangChain",
 )
 def conversation_event_summary(
     context,
-    hex_resource: ConfigurableHexResource,
     articles,
     x_conversations,
     x_conversation_posts,
@@ -68,9 +68,6 @@ def conversation_event_summary(
     conversation_event_summary_outputs = []
 
     if not x_conversations.empty:
-        # Initialize Hex client
-        hex_client = hex_resource.create_client()
-
         for _, conversation in x_conversations.iterrows():
             # Conversation's tweet text
             conversation_list = [conversation["tweet_text"]]
@@ -110,27 +107,32 @@ def conversation_event_summary(
                         article_summary = article["summary"]
                         break
 
-                hex_output: HexOutput = hex_client.run_and_poll(
-                    project_id="00c977d2-e2c7-43a0-abfc-3d466dbad3c1",
-                    inputs={
-                        "conversation_id": conversation["tweet_conversation_id"],
-                        "conversation_markdown": conversation_markdown,
-                        "conversation_article_url": article_url,
-                        "conversation_article_title": article_title,
-                        "conversation_article_summary": article_summary,
-                    },
-                    kill_on_timeout=True,
-                    poll_interval=DEFAULT_POLL_INTERVAL,
-                    poll_timeout=None,
+                conversation = Conversation(
+                    id=conversation["tweet_conversation_id"],
+                    conversation=conversation_markdown,
                 )
 
-                conversation_event_summary_output = EventSummary(
-                    conversation_id=conversation["tweet_conversation_id"],
-                    run_id=hex_output.run_response["runId"],
-                    run_url=hex_output.run_response["runUrl"],
-                    trace_id=hex_output.run_response["traceId"],
-                    partition_time=partition_time,
+                article = Article(
+                    url=article_url,
+                    title=article_title,
+                    summary=article_summary,
                 )
+
+                conversation_event_summary_output = (
+                    conversation_event_summary_agent.invoke(
+                        {
+                            "conversation": conversation,
+                            "article": article,
+                            "completeness_assessment": False,
+                            "research_cycles": 0,
+                        }
+                    )
+                )
+
+                conversation_event_summary_output["conversation_id"] = conversation[
+                    "id"
+                ]
+                conversation_event_summary_output["partition_time"] = partition_time
 
                 conversation_event_summary_outputs.append(
                     conversation_event_summary_output

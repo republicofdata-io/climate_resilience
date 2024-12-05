@@ -15,8 +15,3 @@ gold_io_manager = BigQueryPandasIOManager(
     project=EnvVar("BIGQUERY_PROJECT_ID"),
     dataset=EnvVar("BIGQUERY_GOLD_DATASET"),
 )
-
-prototypes_io_manager = BigQueryPandasIOManager(
-    project=EnvVar("BIGQUERY_PROJECT_ID"),
-    dataset=EnvVar("BIGQUERY_PROTOTYPES_DATASET"),
-)

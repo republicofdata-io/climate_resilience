@@ -40,6 +40,7 @@ refresh_narrative_assets_job = define_asset_job(
     selection=AssetSelection.assets(
         AssetKey(["silver", "conversation_classifications"]),
         AssetKey(["silver", "post_narrative_associations"]),
+        AssetKey(["silver", "conversation_event_summary"]),
     ),
     partitions_def=three_hour_partition_def,
     tags={"dagster/max_runtime": 30 * 60},
@@ -51,15 +52,5 @@ refresh_gold_assets_job = define_asset_job(
     selection=AssetSelection.assets(
         gold_assets,
     ),
-    tags={"dagster/max_runtime": 30 * 60},
-)
-
-# Job to refresh prototype assets
-refresh_prototype_assets_job = define_asset_job(
-    name="refresh_prototype_assets_job",
-    selection=AssetSelection.assets(
-        AssetKey(["prototypes", "conversation_event_summary"]),
-    ),
-    partitions_def=three_hour_partition_def,
     tags={"dagster/max_runtime": 30 * 60},
 )

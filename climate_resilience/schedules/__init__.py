@@ -11,7 +11,6 @@ from ..jobs import (
     refresh_gold_assets_job,
     refresh_media_assets_job,
     refresh_narrative_assets_job,
-    refresh_prototype_assets_job,
     refresh_social_network_conversation_assets_job,
     refresh_social_network_post_assets_job,
 )
@@ -46,18 +45,6 @@ def refresh_social_network_post_assets_schedule(context):
     cron_schedule="45 */3 * * *",
 )
 def refresh_narrative_assets_schedule(context):
-    execution_time = context.scheduled_execution_time
-    partition_key = three_hour_partition_def.get_last_partition_key(
-        current_time=execution_time - timedelta(minutes=45)
-    )
-    return RunRequest(partition_key=partition_key)
-
-
-@schedule(
-    job=refresh_prototype_assets_job,
-    cron_schedule="30 */3 * * *",
-)
-def refresh_prototype_assets_schedule(context):
     execution_time = context.scheduled_execution_time
     partition_key = three_hour_partition_def.get_last_partition_key(
         current_time=execution_time - timedelta(minutes=45)
