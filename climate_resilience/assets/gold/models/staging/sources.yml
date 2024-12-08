@@ -26,6 +26,11 @@ sources:
         meta:
           dagster:
             asset_key: ["silver", "conversation_classifications"]
+      - name: conversation_event_summaries
+        identifier: conversation_event_summary_output
+        meta:
+          dagster:
+            asset_key: ["silver", "conversation_event_summary"]
       - name: post_narrative_associations
         meta:
           dagster:
@@ -34,12 +39,3 @@ sources:
         meta:
           dagster:
             asset_key: ["silver", "user_geolocations"]
-  - name: prototypes
-    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
-    schema: "{{ env_var('BIGQUERY_PROTOTYPES_DATASET') }}"
-    tables:
-      - name: conversation_event_summaries
-        identifier: conversation_event_summary_output
-        meta:
-          dagster:
-            asset_key: ["prototypes", "conversation_event_summary"]

@@ -45,7 +45,7 @@ class PostAssociation(TypedDict):
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_time"},
     output_required=False,
-    compute_kind="LangGraph",
+    compute_kind="LangChain",
 )
 def conversation_classifications(
     context,
@@ -143,13 +143,13 @@ def conversation_classifications(
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=0),
         ),
         "conversation_event_summary": AssetIn(
-            key=["prototypes", "conversation_event_summary"],
+            key=["silver", "conversation_event_summary"],
         ),
     },
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_time"},
     output_required=False,
-    compute_kind="LangGraph",
+    compute_kind="LangChain",
 )
 def post_narrative_associations(
     context,
@@ -182,7 +182,7 @@ def post_narrative_associations(
 
     # Fetch all event summaries from the conversations in x_conversations
     sql = f"""
-    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_PROTOTYPES_DATASET")}.conversation_event_summary_output
+    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SILVER_DATASET")}.conversation_event_summary_output
     where conversation_natural_key in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
     """
     context.log.info(f"Fetching event summaries from BigQuery: {sql}")
