@@ -242,6 +242,7 @@ def assessment_node(state: ResearchState) -> ResearchState:
         }
         state["research_findings"].append(new_research_finding)
 
+    print("Assessment:", completeness_assessment)
     return {"completeness_assessment": completeness_assessment}
 
 
@@ -276,6 +277,7 @@ def research_node(state: ResearchState) -> ResearchState:
 
             research_finding["summary"] = findings_summary.summary
 
+    print("Research Cycles:", state["research_cycles"] + 1)
     return {"research_cycles": state["research_cycles"] + 1}
 
 
@@ -329,6 +331,7 @@ def write_event_summary_node(state: ResearchState) -> ResearchState:
     # The output will have the following structure:
     event_summary = output.event_summary
 
+    print("Event Summary:", event_summary)
     return {"event_summary": event_summary}
 
 

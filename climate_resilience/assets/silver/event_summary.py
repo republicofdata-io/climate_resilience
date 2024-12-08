@@ -19,6 +19,13 @@ class Article(TypedDict):
     summary: Optional[str]
 
 
+class EventSummary(TypedDict):
+    conversation_id: str
+    event_summary: str
+    research_cycles: int
+    partition_time: datetime
+
+
 @asset(
     name="conversation_event_summary",
     description="Summary of the event discussed in a conversation",
@@ -65,7 +72,7 @@ def conversation_event_summary(
     partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
 
     context.log.info(f"Number of conversations: {len(x_conversations)}")
-    conversation_event_summary_outputs = []
+    event_summaries = []
 
     if not x_conversations.empty:
         for _, conversation in x_conversations.iterrows():
@@ -128,20 +135,21 @@ def conversation_event_summary(
                         }
                     )
                 )
-
-                conversation_event_summary_output["conversation_id"] = conversation[
-                    "id"
-                ]
-                conversation_event_summary_output["partition_time"] = partition_time
-
-                conversation_event_summary_outputs.append(
-                    conversation_event_summary_output
+                event_summary = EventSummary(
+                    conversation_id=conversation["id"],
+                    event_summary=conversation_event_summary_output["event_summary"],
+                    research_cycles=conversation_event_summary_output[
+                        "research_cycles"
+                    ],
+                    partition_time=partition_time,
                 )
 
-    if conversation_event_summary_outputs:
+                event_summaries.append(event_summary)
+
+    if event_summaries:
         yield Output(
-            value=pd.DataFrame(conversation_event_summary_outputs),
+            value=pd.DataFrame(event_summaries),
             metadata={
-                "num_rows": str(len(conversation_event_summary_outputs)),
+                "num_rows": str(len(event_summaries)),
             },
         )
