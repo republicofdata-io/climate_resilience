@@ -1,1 +1,1 @@
-dbt deps --project-dir ./climate_resilience/assets/gold --profiles-dir ./climate_resilience/assets/gold
+dbt deps --project-dir ./climate_resilience/assets/analytics --profiles-dir ./climate_resilience/assets/analytics

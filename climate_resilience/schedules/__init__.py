@@ -8,7 +8,7 @@ from dagster import (
 )
 
 from ..jobs import (
-    refresh_gold_assets_job,
+    refresh_analytics_assets_job,
     refresh_media_assets_job,
     refresh_narrative_assets_job,
     refresh_social_network_conversation_assets_job,
@@ -52,6 +52,6 @@ def refresh_narrative_assets_schedule(context):
     return RunRequest(partition_key=partition_key)
 
 
-refresh_gold_assets_schedule = ScheduleDefinition(
-    job=refresh_gold_assets_job, cron_schedule="0 7,19 * * *"
+refresh_analytics_assets_schedule = ScheduleDefinition(
+    job=refresh_analytics_assets_job, cron_schedule="0 7,19 * * *"
 )

@@ -1,6 +1,6 @@
 with source as (
 
-    select * from {{ source('silver', 'post_narrative_associations') }}
+    select * from {{ source('narratives', 'post_narrative_associations') }}
 
 ),
 

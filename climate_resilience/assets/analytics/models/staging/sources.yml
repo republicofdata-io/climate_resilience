@@ -1,41 +1,46 @@
 version: 2
 
 sources:
-  - name: bronze
+  - name: media
     database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
-    schema: "{{ env_var('BIGQUERY_BRONZE_DATASET') }}"
+    schema: "{{ env_var('BIGQUERY_MEDIA_DATASET') }}"
     tables:
       - name: nytimes_articles
         meta:
           dagster:
-            asset_key: ["bronze", "nytimes_articles"]
+            asset_key: ["media", "nytimes_articles"]
+
+  - name: social_networks
+    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+    schema: "{{ env_var('BIGQUERY_SOCIAL_NETWORKS_DATASET') }}"
+    tables:
       - name: x_conversations
         meta:
           dagster:
-            asset_key: ["bronze", "x_conversations"]
+            asset_key: ["social_networks", "x_conversations"]
       - name: x_conversation_posts
         meta:
           dagster:
-            asset_key: ["bronze", "x_conversation_posts"]
+            asset_key: ["social_networks", "x_conversation_posts"]
+      - name: user_geolocations
+        meta:
+          dagster:
+            asset_key: ["social_networks", "user_geolocations"]
 
-  - name: silver
+  - name: narratives
     database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
-    schema: "{{ env_var('BIGQUERY_SILVER_DATASET') }}"
+    schema: "{{ env_var('BIGQUERY_NARRATIVES_DATASET') }}"
     tables:
       - name: conversation_classifications
         meta:
           dagster:
-            asset_key: ["silver", "conversation_classifications"]
+            asset_key: ["narratives", "conversation_classifications"]
       - name: conversation_event_summaries
         identifier: conversation_event_summary
         meta:
           dagster:
-            asset_key: ["silver", "conversation_event_summary"]
+            asset_key: ["narratives", "conversation_event_summary"]
       - name: post_narrative_associations
         meta:
           dagster:
-            asset_key: ["silver", "post_narrative_associations"]
-      - name: user_geolocations
-        meta:
-          dagster:
-            asset_key: ["silver", "user_geolocations"]
+            asset_key: ["narratives", "post_narrative_associations"]

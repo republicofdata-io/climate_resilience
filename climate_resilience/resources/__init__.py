@@ -3,7 +3,6 @@ import os
 from dagster import file_relative_path
 from dagster_dbt import DbtCliResource
 
-from .gcp_resource import gcp_resource
 from .supabase_resource import SupabaseResource
 from .x_resource import XResource
 
@@ -14,8 +13,8 @@ supabase_resource = SupabaseResource(
 x_resource = XResource(x_bearer_token=os.environ.get("X_BEARER_TOKEN", ""))
 
 dbt_resource = DbtCliResource(
-    project_dir=file_relative_path(__file__, "../assets/gold/"),
-    profiles_dir=file_relative_path(__file__, "../assets/gold/"),
-    profile="climate_resilience_gold",
-    target="gold",
+    project_dir=file_relative_path(__file__, "../assets/analytics/"),
+    profiles_dir=file_relative_path(__file__, "../assets/analytics/"),
+    profile="climate_resilience_analytics",
+    target="analytics",
 )
