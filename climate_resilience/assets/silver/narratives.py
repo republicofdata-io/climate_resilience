@@ -182,7 +182,7 @@ def post_narrative_associations(
 
     # Fetch all event summaries from the conversations in x_conversations
     sql = f"""
-    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SILVER_DATASET")}.conversation_event_summary_output
+    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SILVER_DATASET")}.conversation_event_summary
     where conversation_natural_key in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
     """
     context.log.info(f"Fetching event summaries from BigQuery: {sql}")
