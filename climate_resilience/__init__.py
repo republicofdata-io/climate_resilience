@@ -4,9 +4,10 @@ import os
 
 from dagster import Definitions
 
-from .assets.bronze import bronze_assets
-from .assets.gold import gold_assets
-from .assets.silver import silver_assets
+from .assets.analytics import analytics_assets
+from .assets.media import media_assets
+from .assets.narratives import narratives_assets
+from .assets.social_networks import social_networks_assets
 from .io_managers import bronze_io_manager, gold_io_manager, silver_io_manager
 from .jobs import (
     refresh_gold_assets_job,
@@ -34,7 +35,12 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = AUTH_FILE
 
 # Define the Dagster app
 defs = Definitions(
-    assets=[*bronze_assets, *silver_assets, gold_assets],
+    assets=[
+        *media_assets,
+        *social_networks_assets,
+        *narratives_assets,
+        analytics_assets,
+    ],
     jobs=[
         refresh_gold_assets_job,
         refresh_media_assets_job,

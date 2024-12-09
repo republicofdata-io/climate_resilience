@@ -27,7 +27,7 @@ sources:
           dagster:
             asset_key: ["silver", "conversation_classifications"]
       - name: conversation_event_summaries
-        identifier: conversation_event_summary_output
+        identifier: conversation_event_summary
         meta:
           dagster:
             asset_key: ["silver", "conversation_event_summary"]

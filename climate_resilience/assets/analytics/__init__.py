@@ -24,7 +24,7 @@ class CustomDagsterDbtTranslator(DagsterDbtTranslator):
     dagster_dbt_translator=CustomDagsterDbtTranslator(),
     manifest=Path("climate_resilience/assets/gold/target", "manifest.json"),
 )
-def gold_assets(context, dbt_resource: DbtCliResource):
+def analytics_assets(context, dbt_resource: DbtCliResource):
     dbt_build_args = ["build"]
 
     yield from dbt_resource.cli(dbt_build_args, context=context).stream()
