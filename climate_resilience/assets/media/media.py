@@ -36,7 +36,7 @@ def build_media_feed_assets(
     @asset(
         name=f"{slug}_articles",
         description=f"Media feed for {name}",
-        io_manager_key="bronze_io_manager",
+        io_manager_key="media_io_manager",
         partitions_def=hourly_partition_def,
         metadata={"partition_expr": "published_ts"},
         output_required=False,

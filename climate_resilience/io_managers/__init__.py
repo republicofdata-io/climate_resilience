@@ -1,17 +1,22 @@
 from dagster import EnvVar
 from dagster_gcp_pandas import BigQueryPandasIOManager
 
-bronze_io_manager = BigQueryPandasIOManager(
+media_io_manager = BigQueryPandasIOManager(
     project=EnvVar("BIGQUERY_PROJECT_ID"),
-    dataset=EnvVar("BIGQUERY_BRONZE_DATASET"),
+    dataset=EnvVar("BIGQUERY_MEDIA_DATASET"),
 )
 
-silver_io_manager = BigQueryPandasIOManager(
+social_networks_io_manager = BigQueryPandasIOManager(
     project=EnvVar("BIGQUERY_PROJECT_ID"),
-    dataset=EnvVar("BIGQUERY_SILVER_DATASET"),
+    dataset=EnvVar("BIGQUERY_SOCIAL_NETWORKS_DATASET"),
 )
 
-gold_io_manager = BigQueryPandasIOManager(
+narratives_io_manager = BigQueryPandasIOManager(
     project=EnvVar("BIGQUERY_PROJECT_ID"),
-    dataset=EnvVar("BIGQUERY_GOLD_DATASET"),
+    dataset=EnvVar("BIGQUERY_NARRATIVES_DATASET"),
+)
+
+analytics_io_manager = BigQueryPandasIOManager(
+    project=EnvVar("BIGQUERY_PROJECT_ID"),
+    dataset=EnvVar("BIGQUERY_ANALYTICS_DATASET"),
 )

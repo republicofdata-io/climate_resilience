@@ -29,22 +29,22 @@ class EventSummary(TypedDict):
 @asset(
     name="conversation_event_summary",
     description="Summary of the event discussed in a conversation",
-    io_manager_key="silver_io_manager",
+    io_manager_key="narratives_io_manager",
     ins={
         "articles": AssetIn(
-            key=["bronze", "nytimes_articles"],
+            key=["media", "nytimes_articles"],
             partition_mapping=TimeWindowPartitionMapping(
                 start_offset=-12, end_offset=-4
             ),
         ),
         "x_conversations": AssetIn(
-            key=["bronze", "x_conversations"],
+            key=["social_networks", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(
                 start_offset=-4, end_offset=-4
             ),
         ),
         "x_conversation_posts": AssetIn(
-            key=["bronze", "x_conversation_posts"],
+            key=["social_networks", "x_conversation_posts"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
     },
