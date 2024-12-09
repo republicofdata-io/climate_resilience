@@ -57,7 +57,7 @@ def assemble_conversations(
             assembled_conversations,
             event_summary,
             left_on="tweet_conversation_id",
-            right_on="conversation_natural_key",
+            right_on="conversation_id",
         )
 
     return assembled_conversations
