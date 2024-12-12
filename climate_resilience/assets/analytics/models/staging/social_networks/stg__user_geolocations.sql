@@ -1,6 +1,6 @@
 with source as (
 
-    select * from {{ source('silver', 'user_geolocations') }}
+    select * from {{ source('social_networks', 'user_geolocations') }}
 
 ),
 

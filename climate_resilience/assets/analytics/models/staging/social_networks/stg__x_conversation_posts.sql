@@ -2,7 +2,7 @@
 
 with source as (
 
-    select * from {{ source('bronze', 'x_conversation_posts') }}
+    select * from {{ source('social_networks', 'x_conversation_posts') }}
 
 ),
 

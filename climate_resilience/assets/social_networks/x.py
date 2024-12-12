@@ -43,7 +43,7 @@ supabase_resource = SupabaseResource(
 media_feeds = supabase_resource.get_media_feeds()
 asset_ins = {
     f"{media_feed['slug']}_articles": AssetIn(
-        AssetKey(["bronze", str(media_feed["slug"]) + "_articles"]),
+        AssetKey(["media", str(media_feed["slug"]) + "_articles"]),
         partition_mapping=TimeWindowPartitionMapping(start_offset=-24),
     )
     for _, media_feed in media_feeds.iterrows()
@@ -53,7 +53,7 @@ asset_ins = {
 @asset(
     name="x_conversations",
     description="X conversations that mention this partition's article",
-    io_manager_key="bronze_io_manager",
+    io_manager_key="social_networks_io_manager",
     ins=asset_ins,
     partitions_def=hourly_partition_def,
     metadata={"partition_expr": "partition_hour_utc_ts"},
@@ -173,10 +173,10 @@ def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwa
 @asset(
     name="x_conversation_posts",
     description="Posts within X conversations",
-    io_manager_key="bronze_io_manager",
+    io_manager_key="social_networks_io_manager",
     ins={
         "x_conversations": AssetIn(
-            key=["bronze", "x_conversations"],
+            key=["social_networks", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=-12),
         )
     },

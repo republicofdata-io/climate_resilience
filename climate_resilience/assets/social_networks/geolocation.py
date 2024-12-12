@@ -65,13 +65,13 @@ def most_precise_location(group):
 @asset(
     name="user_geolocations",
     description="Geolocation of social network user's profile location",
-    io_manager_key="silver_io_manager",
+    io_manager_key="social_networks_io_manager",
     ins={
         "x_conversations": AssetIn(
-            key=["bronze", "x_conversations"],
+            key=["social_networks", "x_conversations"],
         ),
         "x_conversation_posts": AssetIn(
-            key=["bronze", "x_conversation_posts"],
+            key=["social_networks", "x_conversation_posts"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=1),
         ),
     },

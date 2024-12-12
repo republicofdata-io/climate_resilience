@@ -29,16 +29,16 @@ class PostAssociation(TypedDict):
 @asset(
     name="conversation_classifications",
     description="Classification of conversations as climate-related or not",
-    io_manager_key="silver_io_manager",
+    io_manager_key="narratives_io_manager",
     ins={
         "x_conversations": AssetIn(
-            key=["bronze", "x_conversations"],
+            key=["social_networks", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(
                 start_offset=-4, end_offset=-4
             ),
         ),
         "x_conversation_posts": AssetIn(
-            key=["bronze", "x_conversation_posts"],
+            key=["social_networks", "x_conversation_posts"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
     },
@@ -126,24 +126,24 @@ def conversation_classifications(
 @asset(
     name="post_narrative_associations",
     description="Associations between social network posts and narrative types",
-    io_manager_key="silver_io_manager",
+    io_manager_key="narratives_io_manager",
     ins={
         "x_conversations": AssetIn(
-            key=["bronze", "x_conversations"],
+            key=["social_networks", "x_conversations"],
             partition_mapping=TimeWindowPartitionMapping(
                 start_offset=-4, end_offset=-4
             ),
         ),
         "x_conversation_posts": AssetIn(
-            key=["bronze", "x_conversation_posts"],
+            key=["social_networks", "x_conversation_posts"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
         ),
         "conversation_classifications": AssetIn(
-            key=["silver", "conversation_classifications"],
+            key=["narratives", "conversation_classifications"],
             partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=0),
         ),
         "conversation_event_summary": AssetIn(
-            key=["silver", "conversation_event_summary"],
+            key=["narratives", "conversation_event_summary"],
         ),
     },
     partitions_def=three_hour_partition_def,
@@ -182,7 +182,7 @@ def post_narrative_associations(
 
     # Fetch all event summaries from the conversations in x_conversations
     sql = f"""
-    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SILVER_DATASET")}.conversation_event_summary
+    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_NARRATIVES_DATASET")}.conversation_event_summary
     where conversation_id in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
     """
     context.log.info(f"Fetching event summaries from BigQuery: {sql}")
