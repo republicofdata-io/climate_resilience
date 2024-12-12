@@ -3,6 +3,7 @@ import os
 from dagster import file_relative_path
 from dagster_dbt import DbtCliResource
 
+from .gcp_resource import gcp_resource
 from .supabase_resource import SupabaseResource
 from .x_resource import XResource
 
