@@ -58,6 +58,6 @@ def assemble_conversations(
             event_summary,
             left_on="tweet_conversation_id",
             right_on="CONVERSATION_ID",
-        )
+        ).drop(columns=["CONVERSATION_ID", "RESEARCH_CYCLES", "PARTITION_TIME"])
 
     return assembled_conversations
