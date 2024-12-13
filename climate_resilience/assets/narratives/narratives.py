@@ -180,26 +180,27 @@ def post_narrative_associations(
     # Initialize DataFrame to store classifications
     post_associations = []
 
-    # Fetch all event summaries from the conversations in x_conversations
-    sql = f"""
-    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_NARRATIVES_DATASET")}.conversation_event_summary
-    where conversation_id in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
-    """
-    context.log.info(f"Fetching event summaries from BigQuery: {sql}")
-
-    with gcp_resource.get_client() as client:
-        job = client.query(sql)
-        job.result()  # Wait for the job to complete
-
-        if job.error_result:
-            error_message = job.error_result.get("message", "Unknown error")
-            raise GoogleAPIError(f"BigQuery job failed: {error_message}")
-        else:
-            event_summary_df = job.to_dataframe()
-
-    context.log.info(f"Number of event summaries fetched: {event_summary_df.shape[0]}")
-
     if not x_conversations.empty:
+        # Fetch all event summaries from the conversations in x_conversations
+        sql = f"""
+        select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_NARRATIVES_DATASET")}.conversation_event_summary
+        where conversation_id in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
+        """
+
+        with gcp_resource.get_client() as client:
+            job = client.query(sql)
+            job.result()  # Wait for the job to complete
+
+            if job.error_result:
+                error_message = job.error_result.get("message", "Unknown error")
+                raise GoogleAPIError(f"BigQuery job failed: {error_message}")
+            else:
+                event_summary_df = job.to_dataframe()
+
+        context.log.info(
+            f"Number of event summaries fetched: {event_summary_df.shape[0]}"
+        )
+
         # Assemble full conversations
         conversations_df = assemble_conversations(
             context,
