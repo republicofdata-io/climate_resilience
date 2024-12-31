@@ -6,6 +6,7 @@ import pandas as pd
 import requests
 import spacy
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
+from dagster_gcp import BigQueryResource
 
 from ...partitions import three_hour_partition_def
 
@@ -80,7 +81,12 @@ def most_precise_location(group):
     output_required=False,
     compute_kind="python",
 )
-def user_geolocations(context, x_conversations, x_conversation_posts):
+def user_geolocations(
+    context,
+    x_conversations,
+    x_conversation_posts,
+    gcp_resource: BigQueryResource,
+):
     # Log upstream asset's partition keys
     context.log.info(
         f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
@@ -107,6 +113,27 @@ def user_geolocations(context, x_conversations, x_conversation_posts):
         subset=["author_id"], keep="first"
     )
     context.log.info(f"Geolocating {len(social_network_posts)} social network users.")
+
+    # TODO: Get existing geolocations for list of users
+    sql = f"""
+    select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SOCIAL_NETWORKS_DATASET")}.user_geolocations
+    where social_network_profile_id in ({','.join(map(lambda x: f"'{x}'", social_network_posts["author_id"].to_list()))})
+    """
+
+    with gcp_resource.get_client() as client:
+        job = client.query(sql)
+        job.result()  # Wait for the job to complete
+
+        if job.error_result:
+            error_message = job.error_result.get("message", "Unknown error")
+            raise GoogleAPIError(f"BigQuery job failed: {error_message}")
+        else:
+            existing_user_geolocations_df = job.to_dataframe()
+            context.log.info(existing_user_geolocations_df)
+
+    # TODO: Filter out users that have already been geolocated in the past 30 days
+    # TODO: First method is with NLP process on top of user profile
+    # TODO: Second method is with ProxyCurl resource
 
     # Load spaCy's NER model
     nlp = spacy.load("en_core_web_sm")
