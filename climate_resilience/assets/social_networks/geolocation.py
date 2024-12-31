@@ -114,10 +114,11 @@ def user_geolocations(
     )
     context.log.info(f"Geolocating {len(social_network_posts)} social network users.")
 
-    # TODO: Get existing geolocations for list of users
+    # Get existing geolocations for list of users
     sql = f"""
     select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SOCIAL_NETWORKS_DATASET")}.user_geolocations
     where social_network_profile_id in ({','.join(map(lambda x: f"'{x}'", social_network_posts["author_id"].to_list()))})
+    and geolocation_ts >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
     """
 
     with gcp_resource.get_client() as client:
@@ -129,11 +130,18 @@ def user_geolocations(
             raise GoogleAPIError(f"BigQuery job failed: {error_message}")
         else:
             existing_user_geolocations_df = job.to_dataframe()
-            context.log.info(existing_user_geolocations_df)
 
-    # TODO: Filter out users that have already been geolocated in the past 30 days
-    # TODO: First method is with NLP process on top of user profile
-    # TODO: Second method is with ProxyCurl resource
+    # Filter out users that have already been geolocated in the past 30 days
+    social_network_posts = social_network_posts[
+        ~social_network_posts["author_id"].isin(
+            existing_user_geolocations_df["SOCIAL_NETWORK_PROFILE_ID"]
+        )
+    ]
+    context.log.info(
+        f"Performing new geolocations for {len(social_network_posts)} social network users."
+    )
+
+    # First approach: Extract geographical entities from the user's profile
 
     # Load spaCy's NER model
     nlp = spacy.load("en_core_web_sm")
@@ -167,6 +175,23 @@ def user_geolocations(
         except Exception as e:
             print(f"Error geolocating {row['article_url']}: {e}")
 
+    # TODO: Second method is with ProxyCurl resource
+    # Filter out users that have been geolocated with the NLP approach
+    social_network_posts = social_network_posts[
+        ~social_network_posts["author_id"].isin(
+            [x["social_network_profile_id"] for x in social_network_user_geolocations]
+        )
+    ]
+
+    for _, row in social_network_posts.iterrows():
+        # TODO: Send requests to ProxyCurl resource
+        context.log.info(f"Geolocating {row['author_id']} with ProxyCurl resource.")
+
+        # TODO: Parse the location fields
+        # TODO: If the location field is not empty, send request to GeoNames API to get the geolocation data
+        # TODO: If the location field is empty, create geolocation entry with null values so that we don't geolocate again for 30 days
+
+    # Deduplicate geolocation info and return asset
     if social_network_user_geolocations:
         social_network_user_profile_geolocations_df = pd.DataFrame(
             social_network_user_geolocations
