@@ -1,5 +1,3 @@
-from typing import List
-
 import pandas as pd
 import requests
 from dagster import ConfigurableResource
@@ -59,8 +57,17 @@ class XResource(ConfigurableResource):
         if response.status_code != 200:
             raise XResourceException(response.status_code, response.text)
 
-        json_response = response.json()
-        return self._parse_response_to_dataframe(json_response)
+        response_json = response.json()
+        tweets_df = self._parse_response_to_dataframe(response_json)
+
+        # Filter out tweets where user's followers_count is less than 50
+        filtered_tweets_df = tweets_df[
+            tweets_df["author_public_metrics"].apply(
+                lambda x: eval(x).get("followers_count", 0) >= 50
+            )
+        ]
+
+        return filtered_tweets_df
 
     def get_tweets(self, tweet_ids: str) -> pd.DataFrame:
         """
