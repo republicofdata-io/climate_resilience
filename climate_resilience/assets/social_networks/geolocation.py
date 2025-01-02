@@ -9,6 +9,7 @@ from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
 from dagster_gcp import BigQueryResource
 
 from ...partitions import three_hour_partition_def
+from ...resources.proxycurl_resource import ProxycurlResource
 
 spacy.cli.download("en_core_web_sm")
 
@@ -86,6 +87,7 @@ def user_geolocations(
     x_conversations,
     x_conversation_posts,
     gcp_resource: BigQueryResource,
+    proxycurl_resource: ProxycurlResource,
 ):
     # Log upstream asset's partition keys
     context.log.info(
@@ -186,6 +188,10 @@ def user_geolocations(
     for _, row in social_network_posts.iterrows():
         # TODO: Send requests to ProxyCurl resource
         context.log.info(f"Geolocating {row['author_id']} with ProxyCurl resource.")
+        proxycurl_response_df = proxycurl_resource.get_person_profile(
+            "https://x.com/" + row["author_username"] + "/"
+        )
+        context.log.info(f"ProxyCurl response: {proxycurl_response_df}")
 
         # TODO: Parse the location fields
         # TODO: If the location field is not empty, send request to GeoNames API to get the geolocation data

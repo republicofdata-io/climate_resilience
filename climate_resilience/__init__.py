@@ -21,7 +21,13 @@ from .jobs import (
     refresh_social_network_conversation_assets_job,
     refresh_social_network_post_assets_job,
 )
-from .resources import dbt_resource, gcp_resource, supabase_resource, x_resource
+from .resources import (
+    dbt_resource,
+    gcp_resource,
+    proxycurl_resource,
+    supabase_resource,
+    x_resource,
+)
 from .schedules import (
     refresh_analytics_assets_schedule,
     refresh_media_assets_schedule,
@@ -67,6 +73,7 @@ defs = Definitions(
         "analytics_io_manager": analytics_io_manager,
         "dbt_resource": dbt_resource,
         "gcp_resource": gcp_resource,
+        "proxycurl_resource": proxycurl_resource,
         "supabase_resource": supabase_resource,
         "x_resource": x_resource,
     },
