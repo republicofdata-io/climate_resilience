@@ -65,11 +65,12 @@ def add_placeholder_geolocation(row, partition_time):
 
 
 def process_locations(
-    locations: List[str], row: pd.Series, partition_time: datetime
+    context, locations: List[str], row: pd.Series, partition_time: datetime
 ) -> List[SocialNetworkUserProfileGeolocation]:
     """Process locations and generate geolocation entries."""
     geolocations = []
     for location_order, location in enumerate(locations):
+        context.log.info(f"Geocoding {location}")
         geocoded_location_data = geocode(location)
         if not geocoded_location_data:
             continue  # Skip if geocode fails
@@ -90,10 +91,17 @@ def process_locations(
             )
         )
 
-    if len(geolocations) == 0:
-        geolocations.append(add_placeholder_geolocation(row, partition_time))
+    context.log.info(f"Geocoded {len(geolocations)} locations.")
 
     return geolocations
+
+
+# Check if the geocoded location is at least at the state level
+def is_state_level(geocoded_data: dict) -> bool:
+    """Check if the geocoded location is at the state level."""
+    return bool(geocoded_data.get("adminName1")) and bool(
+        geocoded_data.get("countryName")
+    )
 
 
 # Calculate the number of decimal places in a coordinate.
@@ -199,48 +207,78 @@ def user_geolocations(
         )
 
         for _, row in social_network_posts.iterrows():
+            context.log.info(f"Processing {row['author_username']}")
             try:
                 # Extract geographical entities from the user's profile
                 locations = extract_locations_with_spacy(
                     row.get("author_location", ""), nlp
                 )
+                context.log.info(
+                    f"Locations found from their user profile: {locations}"
+                )
 
                 # If locations found via NLP, process them
                 if locations:
-                    social_network_user_geolocations.extend(
-                        process_locations(locations, row, partition_time)
-                    )
-                    continue
+                    precise_geolocations = []
+                    for location in locations:
+                        geocoded_location_data = geocode(location)
 
-                # TODO: If no locations or location precision is not at the city level, fall back to ProxyCurl
+                        # Check if the location is precise (state level)
+                        if is_state_level(geocoded_location_data):
+                            precise_geolocations.append(location)
+
+                    # Check if we have precise geolocations, else we'll fall back to proxycurl
+                    if precise_geolocations:
+                        geo_locations = process_locations(
+                            context, precise_geolocations, row, partition_time
+                        )
+                        if geo_locations:
+                            social_network_user_geolocations.extend(geo_locations)
+                            continue
 
                 # Otherwise, fallback to ProxyCurl
+                context.log.info("Falling back to ProxyCurl for geolocation.")
                 proxycurl_response_df = proxycurl_resource.get_person_profile(
                     f"https://x.com/{row['author_username']}/"
                 )
 
                 if proxycurl_response_df.empty:
+                    context.log.info("Proxycurl returned an empty DataFrame.")
                     social_network_user_geolocations.append(
                         add_placeholder_geolocation(row, partition_time)
                     )
                     continue
 
                 # Process ProxyCurl data
-                proxycurl_locations = [
-                    f"{proxycurl_response_df.get('city', '')}, {proxycurl_response_df.get('state', '')}"
-                ]
+                city = proxycurl_response_df.iloc[0].get("city") or ""
+                state = proxycurl_response_df.iloc[0].get("state") or ""
+                country = proxycurl_response_df.iloc[0].get("country_full_name") or ""
+                proxycurl_locations = [city.strip(), state.strip(), country.strip()]
+
                 if proxycurl_locations:
-                    social_network_user_geolocations.extend(
-                        process_locations(proxycurl_locations, row, partition_time)
+                    context.log.info(
+                        f"Locations found from ProxyCurl: {proxycurl_locations}"
                     )
-                    continue
+                    geolocations = process_locations(
+                        context, proxycurl_locations, row, partition_time
+                    )
+                    if geolocations:
+                        social_network_user_geolocations.extend(geolocations)
+                        continue
+                    else:
+                        context.log.info("No locations found from ProxyCurl.")
+                        social_network_user_geolocations.append(
+                            add_placeholder_geolocation(row, partition_time)
+                        )
+                        continue
                 else:
+                    context.log.info("No locations found from ProxyCurl.")
                     social_network_user_geolocations.append(
                         add_placeholder_geolocation(row, partition_time)
                     )
 
             except Exception as e:
-                context.log.error(f"Error processing {row['author_id']}: {e}")
+                context.log.error(f"Error processing {row['author_username']}: {e}")
                 social_network_user_geolocations.append(
                     add_placeholder_geolocation(row, partition_time)
                 )
