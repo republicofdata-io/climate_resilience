@@ -14,6 +14,6 @@ class ProxycurlResource(ConfigurableResource):
         }
         response = requests.get(api_endpoint, params=params, headers=headers)
 
-        response_df = pd.DataFrame(response.data)
+        response_df = pd.DataFrame(response)
 
         return response_df
