@@ -1,15 +1,18 @@
 import os
 from datetime import datetime
-from typing import TypedDict
+from typing import List, TypedDict
 
 import pandas as pd
 import requests
 import spacy
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
+from dagster_gcp import BigQueryResource
 
 from ...partitions import three_hour_partition_def
+from ...resources.proxycurl_resource import ProxycurlResource
 
 spacy.cli.download("en_core_web_sm")
+nlp = spacy.load("en_core_web_sm")
 
 
 class SocialNetworkUserProfileGeolocation(TypedDict):
@@ -32,7 +35,73 @@ def geocode(location):
     spacy_username = os.getenv("SPACY_USERNAME")
     url = f"http://api.geonames.org/searchJSON?q={location}&maxRows=1&username={spacy_username}"
     response = requests.get(url)
-    return response.json()["geonames"][0]
+    if response.ok and response.json()["geonames"]:
+        return response.json()["geonames"][0]
+    return {}
+
+
+def extract_locations_with_spacy(text: str, nlp) -> List[str]:
+    """Extract geographical entities from text using spaCy."""
+    doc = nlp(text)
+    return [ent.text for ent in doc.ents if ent.label_ == "GPE"]
+
+
+def add_placeholder_geolocation(row, partition_time):
+    """Create a placeholder geolocation entry for a user."""
+    return SocialNetworkUserProfileGeolocation(
+        social_network_profile_id=row["author_id"],
+        social_network_profile_username=row["author_username"],
+        location_order=None,
+        location=None,
+        countryName="",
+        countryCode="",
+        adminName1="",
+        adminCode1="",
+        latitude=None,
+        longitude=None,
+        geolocation_ts=datetime.now(),
+        partition_hour_utc_ts=partition_time,
+    )
+
+
+def process_locations(
+    context, locations: List[str], row: pd.Series, partition_time: datetime
+) -> List[SocialNetworkUserProfileGeolocation]:
+    """Process locations and generate geolocation entries."""
+    geolocations = []
+    for location_order, location in enumerate(locations):
+        context.log.info(f"Geocoding {location}")
+        geocoded_location_data = geocode(location)
+        if not geocoded_location_data:
+            continue  # Skip if geocode fails
+        geolocations.append(
+            SocialNetworkUserProfileGeolocation(
+                social_network_profile_id=row["author_id"],
+                social_network_profile_username=row["author_username"],
+                location_order=location_order,
+                location=location,
+                countryName=geocoded_location_data.get("countryName", ""),
+                countryCode=geocoded_location_data.get("countryCode", ""),
+                adminName1=geocoded_location_data.get("adminName1", ""),
+                adminCode1=geocoded_location_data.get("adminCode1", ""),
+                latitude=geocoded_location_data.get("lat", ""),
+                longitude=geocoded_location_data.get("lng", ""),
+                geolocation_ts=datetime.now(),
+                partition_hour_utc_ts=partition_time,
+            )
+        )
+
+    context.log.info(f"Geocoded {len(geolocations)} locations.")
+
+    return geolocations
+
+
+# Check if the geocoded location is at least at the state level
+def is_state_level(geocoded_data: dict) -> bool:
+    """Check if the geocoded location is at the state level."""
+    return bool(geocoded_data.get("adminName1")) and bool(
+        geocoded_data.get("countryName")
+    )
 
 
 # Calculate the number of decimal places in a coordinate.
@@ -80,7 +149,13 @@ def most_precise_location(group):
     output_required=False,
     compute_kind="python",
 )
-def user_geolocations(context, x_conversations, x_conversation_posts):
+def user_geolocations(
+    context,
+    x_conversations,
+    x_conversation_posts,
+    gcp_resource: BigQueryResource,
+    proxycurl_resource: ProxycurlResource,
+):
     # Log upstream asset's partition keys
     context.log.info(
         f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
@@ -96,50 +171,119 @@ def user_geolocations(context, x_conversations, x_conversation_posts):
     # Initialize DataFrame that will hold geolocation data of social network user's profile location
     social_network_user_geolocations = []
 
-    # Concatenate the social network posts
+    # Combine and deduplicate posts
     social_network_posts = pd.concat(
-        [x_conversations, x_conversation_posts],
-        ignore_index=True,
-    )
-
-    # Drop duplicates
-    social_network_posts = social_network_posts.drop_duplicates(
-        subset=["author_id"], keep="first"
-    )
+        [x_conversations, x_conversation_posts], ignore_index=True
+    ).drop_duplicates(subset=["author_id"], keep="first")
     context.log.info(f"Geolocating {len(social_network_posts)} social network users.")
 
-    # Load spaCy's NER model
-    nlp = spacy.load("en_core_web_sm")
+    # If we have social network posts to geolocate
+    if not social_network_posts.empty:
+        # Get existing geolocations for list of users
+        sql = f"""
+        select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SOCIAL_NETWORKS_DATASET")}.user_geolocations
+        where social_network_profile_id in ({','.join(map(lambda x: f"'{x}'", social_network_posts["author_id"].to_list()))})
+        and geolocation_ts >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
+        """
 
-    for _, row in social_network_posts.iterrows():
-        try:
-            # Extract location entities
-            doc = nlp(str(row["author_location"]))
-            locations = [ent.text for ent in doc.ents if ent.label_ == "GPE"]
+        with gcp_resource.get_client() as client:
+            job = client.query(sql)
+            job.result()  # Wait for the job to complete
 
-            for location in locations:
-                geocoded_location_data = geocode(location)
+            if job.error_result:
+                error_message = job.error_result.get("message", "Unknown error")
+                raise GoogleAPIError(f"BigQuery job failed: {error_message}")
+            else:
+                existing_user_geolocations_df = job.to_dataframe()
 
-                social_network_user_geolocations.append(
-                    SocialNetworkUserProfileGeolocation(
-                        social_network_profile_id=row["author_id"],
-                        social_network_profile_username=row["author_username"],
-                        location_order=locations.index(location),
-                        location=location,
-                        countryName=geocoded_location_data.get("countryName", ""),
-                        countryCode=geocoded_location_data.get("countryCode", ""),
-                        adminName1=geocoded_location_data.get("adminName1", ""),
-                        adminCode1=geocoded_location_data.get("adminCode1", ""),
-                        latitude=geocoded_location_data.get("lat", ""),
-                        longitude=geocoded_location_data.get("lng", ""),
-                        geolocation_ts=datetime.now(),
-                        partition_hour_utc_ts=partition_time,
-                    )
+        # Filter out users that have already been geolocated in the past 30 days
+        social_network_posts = social_network_posts[
+            ~social_network_posts["author_id"].isin(
+                existing_user_geolocations_df["SOCIAL_NETWORK_PROFILE_ID"]
+            )
+        ]
+        context.log.info(
+            f"Performing new geolocations for {len(social_network_posts)} social network users."
+        )
+
+        for _, row in social_network_posts.iterrows():
+            context.log.info(f"Processing {row['author_username']}")
+            try:
+                # Extract geographical entities from the user's profile
+                locations = extract_locations_with_spacy(
+                    row.get("author_location", ""), nlp
+                )
+                context.log.info(
+                    f"Locations found from their user profile: {locations}"
                 )
 
-        except Exception as e:
-            print(f"Error geolocating {row['article_url']}: {e}")
+                # If locations found via NLP, process them
+                if locations:
+                    precise_geolocations = []
+                    for location in locations:
+                        geocoded_location_data = geocode(location)
 
+                        # Check if the location is precise (state level)
+                        if is_state_level(geocoded_location_data):
+                            precise_geolocations.append(location)
+
+                    # Check if we have precise geolocations, else we'll fall back to proxycurl
+                    if precise_geolocations:
+                        geo_locations = process_locations(
+                            context, precise_geolocations, row, partition_time
+                        )
+                        if geo_locations:
+                            social_network_user_geolocations.extend(geo_locations)
+                            continue
+
+                # Otherwise, fallback to ProxyCurl
+                context.log.info("Falling back to ProxyCurl for geolocation.")
+                proxycurl_response_df = proxycurl_resource.get_person_profile(
+                    f"https://x.com/{row['author_username']}/"
+                )
+
+                if proxycurl_response_df.empty:
+                    context.log.info("Proxycurl returned an empty DataFrame.")
+                    social_network_user_geolocations.append(
+                        add_placeholder_geolocation(row, partition_time)
+                    )
+                    continue
+
+                # Process ProxyCurl data
+                city = proxycurl_response_df.iloc[0].get("city") or ""
+                state = proxycurl_response_df.iloc[0].get("state") or ""
+                country = proxycurl_response_df.iloc[0].get("country_full_name") or ""
+                proxycurl_locations = [city.strip(), state.strip(), country.strip()]
+
+                if proxycurl_locations:
+                    context.log.info(
+                        f"Locations found from ProxyCurl: {proxycurl_locations}"
+                    )
+                    geolocations = process_locations(
+                        context, proxycurl_locations, row, partition_time
+                    )
+                    if geolocations:
+                        social_network_user_geolocations.extend(geolocations)
+                        continue
+                    else:
+                        context.log.info("No locations found from ProxyCurl.")
+                        social_network_user_geolocations.append(
+                            add_placeholder_geolocation(row, partition_time)
+                        )
+                        continue
+                else:
+                    context.log.info("No locations found from ProxyCurl.")
+                    social_network_user_geolocations.append(
+                        add_placeholder_geolocation(row, partition_time)
+                    )
+
+            except Exception as e:
+                context.log.error(f"Error processing {row['author_username']}: {e}")
+                social_network_user_geolocations.append(
+                    add_placeholder_geolocation(row, partition_time)
+                )
+
+    # Deduplicate geolocation info and return asset
     if social_network_user_geolocations:
         social_network_user_profile_geolocations_df = pd.DataFrame(
             social_network_user_geolocations
