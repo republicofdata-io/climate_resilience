@@ -14,6 +14,27 @@ class ProxycurlResource(ConfigurableResource):
         }
         response = requests.get(api_endpoint, params=params, headers=headers)
 
-        response_df = pd.DataFrame(response)
+        # Check for 404 or other errors
+        if response.status_code == 404:
+            print("Error 404: Profile not found.")
+            return pd.DataFrame()  # Return an empty DataFrame
+
+        if not response.ok:
+            print(f"Error {response.status_code}: {response.text}")
+            return pd.DataFrame()  # Return an empty DataFrame
+
+        # Parse the JSON response
+        response_json = response.json()
+
+        # Extract geographical info
+        geo_info = {
+            "country": response_json.get("country"),
+            "country_full_name": response_json.get("country_full_name"),
+            "city": response_json.get("city"),
+            "state": response_json.get("state"),
+        }
+
+        # Convert to DataFrame
+        response_df = pd.DataFrame([geo_info])
 
         return response_df
