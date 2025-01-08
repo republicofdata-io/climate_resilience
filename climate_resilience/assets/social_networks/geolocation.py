@@ -253,7 +253,15 @@ def user_geolocations(
                 city = proxycurl_response_df.iloc[0].get("city") or ""
                 state = proxycurl_response_df.iloc[0].get("state") or ""
                 country = proxycurl_response_df.iloc[0].get("country_full_name") or ""
-                proxycurl_locations = [city.strip(), state.strip(), country.strip()]
+
+                proxycurl_locations = []
+
+                if city.strip():
+                    proxycurl_locations.append(city.strip())
+                if state.strip():
+                    proxycurl_locations.append(state.strip())
+                if country.strip():
+                    proxycurl_locations.append(country.strip())
 
                 if proxycurl_locations:
                     context.log.info(
