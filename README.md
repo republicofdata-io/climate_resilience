@@ -1,11 +1,61 @@
-# climate_narratives
+# Understanding Public Narratives on Climate Change
 
-The Climate Resilience Data Platform is a tool I developed to capture and analyze the evolving narratives around climate change. By mining data from media articles and social networks, it offers a way to track how climate discussions shift over time and across different regions.
+The Climate Resilience Data Platform is designed to provide structured, actionable data to better understand the evolving landscape of public climate change discourse. By offering geographically and temporally tagged datasets, the platform supports efforts to analyze and respond to the public’s perception of climate change events with clarity and precision.
 
-The platform is built on a layered, modular architecture that emphasizes flexibility and scalability. Dagster is at the core, orchestrating workflows and ensuring that data pipelines run smoothly. Supabase is used for configuration management, while LangChain brings in Generative AI to handle more complex data processing tasks.
+## Platform Overview
 
-One of the key features of the platform is its ability to enrich data with geolocation mapping and narrative labeling. This allows for a more nuanced understanding of where climate stories are gaining traction and how public perception is shaped. The result is a data product that not only collects information but provides deeper insights into the climate discourse.
+**Purpose**
+To deliver structured data that highlights how climate change events are discussed geographically and temporally, enabling analysis of public sentiment and dominant narratives.
 
-## Entity Relationship Diagram
+**Open-Source Foundation**
+The platform operates transparently, with its methodologies and processes publicly accessible to ensure credibility and reproducibility.
 
-![ERD](design/Climate-Resilience.png)
+## Core Features
+
+**Geotemporal Analysis**
+Tracks public discourse at the intersection of geography and time to reveal regional variations and shifts in sentiment.
+
+**Narrative Classification**
+Categorizes conversations into key themes: Biophysical, Critical, Dismissive, and Integrative, offering insights into dominant and emerging climate narratives.
+
+**AI-Driven Processing**
+Uses advanced AI agents to enrich and structure data, automating tasks such as discourse classification and narrative association.
+
+**Scalable Architecture**
+Built on a modular framework with tools like Dagster (workflow orchestration) and Supabase (configuration management) to efficiently handle large and dynamic datasets.
+
+## Data Outputs
+
+**Categorized Datasets**
+Structured data tagged by narrative type, geography, and time, ready for integration into research, policy, or communication workflows.
+
+**Trend Analysis**
+Temporal insights into how public sentiment shifts in response to key climate events or policies.
+
+**Geographic Maps**
+Visualizations of dominant narratives across regions, providing a clear view of localized sentiment.
+
+## Applications
+
+**Researchers**
+Analyze public discourse to identify trends, generate new insights, and support academic studies.
+
+**Policymakers**
+Use data to inform region-specific climate strategies or assess the public response to policies.
+
+**Communicators**
+Identify prevailing narratives to shape effective messaging and engagement strategies.
+
+## Additional Resources
+
+**Open-Source Platform**
+Explore the platform’s methodologies and contribute at [GitHub](https://github.com/republicofdata-io/climate_resilience).
+
+**Weekly Insights**
+Access curated narrative reports at Climate Narratives on [Substack](https://climatenarratives.substack.com/).
+
+**RepublicOfData.io**
+The platform is developed by [RepublicOfData.io](https://republicofdata.io/), a social data product building agency.
+
+**Contact**
+For inquiries, reach out to Olivier Dupuis, the platform owner, at [olivier@republicofdata.io](mailto:olivier@republicofdata.io).
