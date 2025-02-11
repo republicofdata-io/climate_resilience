@@ -4,7 +4,7 @@ The **Climate Resilience Data Platform** provides structured, AI-driven insights
   
 **Key Features**
 - **Geotemporal Analysis** – Understand how climate narratives evolve over time and across locations.
-- **AI-Powered Classification** – Identify dominant themes (e.g., Biophysical, Critical, Dismissive, Integrative).
+- **AI-Powered Classification** – Identify dominant themes (e.g., Biophysical, Critical, Dismissive, Integrative). Learn more about our **[Climate Discourse Framework](documentation/climate_discourse_framework.md)**.
 - **Structured Data Outputs** – Actionable datasets for research, policy, and communication.
 - **Open-Source & Scalable** – Built with transparency and efficiency in mind.
 
