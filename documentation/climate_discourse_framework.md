@@ -21,51 +21,48 @@ The following sections outline the framework’s four main categories and their 
 
 ---
 
-## **1. Biophysical**
-Climate change is an environmental problem that can be addressed through policies, technologies, and behavioral changes to reduce emissions and adapt to impacts.
+## 1. Biophysical
+Climate change is seen as an environmental challenge addressable through technological, policy, and individual interventions.
 
-### Sub-Categories:
-- **Technological Solutions**: Narratives about renewable energy, carbon capture, electric vehicles, and other innovations to combat climate change.
-- **Policy Advocacy**: Calls for regulatory action such as carbon taxes, emissions caps, or international agreements to mitigate climate change.
-- **Behavioral Change**: Discussions about individual actions like reducing waste, conserving energy, or adopting sustainable diets.
-- **Nature-Based Solutions**: Emphasis on solutions like reforestation, wetlands restoration, and biodiversity conservation to address climate challenges.
-- **Disaster Preparedness**: Focus on adaptation measures like planning and infrastructure to handle climate-induced disasters.
-
----
-
-## **2. Critical**
-Climate change is a social problem caused by unsustainable economic, political, and cultural processes. Addressing it requires challenging power structures and unsustainable systems.
-
-### Sub-Categories:
-- **Climate Justice**: Narratives highlighting equity issues and the disproportionate impact of climate change on marginalized or vulnerable communities.
-- **Fossil Fuel Opposition**: Critiques of industries and systems that perpetuate emissions, including divestment and anti-fossil fuel campaigns.
-- **Economic Critique**: Arguments against capitalism, overconsumption, and global economic systems that drive environmental degradation.
-- **Global Inequities**: Discussions about the uneven responsibilities and impacts of climate change between the Global North and South.
-- **Corporate Accountability**: Calls for corporations to take responsibility for their emissions, lobbying efforts, and greenwashing practices.
+- **Technological Solutions**: Innovations in renewable energy, carbon capture, and other green technologies.
+- **Policy Advocacy**: Calls for regulatory measures, carbon pricing, and international agreements.
+- **Behavioral Change**: Emphasis on individual actions and lifestyle modifications to reduce emissions.
+- **Nature-Based Solutions**: Strategies involving reforestation, ecosystem restoration, and biodiversity conservation.
+- **Disaster Preparedness**: Adaptation measures aimed at enhancing resilience against climate impacts.
 
 ---
 
-## **3. Dismissive**
-Climate change is not an urgent or real problem, and action to address it is either unnecessary or harmful.
+## 2. Critical
+Climate change is viewed as a systemic issue rooted in social, economic, and political structures.
 
-### Sub-Categories:
-- **Climate Skepticism**: Arguments disputing the existence or human-caused nature of climate change.
-- **Economic Prioritization**: Claims that economic growth and jobs should take precedence over climate action.
-- **Downplaying Impacts**: Narratives minimizing the consequences of climate change (e.g., “It’s natural,” “It’s not that bad”).
-- **Anti-Regulation**: Opposition to government intervention, often framed as overreach or harmful to personal freedoms.
-- **Conspiracy Theories**: Claims that climate change is a hoax or part of a larger political or financial conspiracy.
+- **Climate Justice**: Focus on equity and the disproportionate impact on marginalized communities.
+- **Fossil Fuel Opposition**: Critiques of fossil fuel industries and their role in perpetuating emissions.
+- **Economic Critique**: Arguments against unsustainable consumption and economic models that drive environmental degradation.
+- **Global Inequities**: Discussions on the uneven responsibilities and impacts between the Global North and South.
+- **Corporate Accountability**: Demands for holding corporations responsible for environmental harm and greenwashing.
 
 ---
 
-## **4. Integrative**
-Climate change is an environmental and social problem rooted in perceptions of human-environment relationships. Addressing it requires cultural and institutional change.
+## 3. Dismissive
+Climate change is considered either a non-issue or not urgent, often prioritizing economic or ideological arguments over environmental concerns.
 
-### Sub-Categories:
-- **Systems Thinking**: Narratives emphasizing the interconnectedness of human and environmental systems and the need for holistic solutions.
-- **Cultural Shifts**: Calls for reframing humanity’s relationship with nature, often incorporating Indigenous knowledge or ecological worldviews.
-- **Sustainable Development**: Discussions about balancing economic growth with environmental stewardship and social equity.
-- **Interdisciplinary Approaches**: Combining insights from science, humanities, and policy to develop innovative solutions.
-- **Behavioral Science**: Focus on psychological and cultural factors that influence climate action and decision-making.
+- **Climate Skepticism**: Disputes regarding the existence or anthropogenic causes of climate change.
+- **Economic Prioritization**: Claims that economic growth and job creation should take precedence over climate action.
+- **Downplaying Impacts**: Narratives minimizing the severity or consequences of climate change.
+- **Anti-Regulation**: Opposition to government interventions and climate-related policies.
+- **Conspiracy Theories**: Beliefs that climate change is fabricated or manipulated for ulterior motives.
+
+---
+
+## 4. Integrative
+Climate change is understood as a complex, multifaceted issue requiring holistic solutions that bridge environmental and social dimensions.
+
+- **Systems Thinking**: Emphasis on the interconnectedness of human and environmental systems.
+- **Cultural Shifts**: Calls for a rethinking of societal values and the incorporation of diverse knowledge systems.
+- **Sustainable Development**: Balancing economic growth with environmental stewardship and social equity.
+- **Interdisciplinary Approaches**: Combining insights from science, humanities, and policy to craft integrated solutions.
+- **Behavioral Science**: Exploring the psychological and cultural dimensions influencing climate action.
+- **Emerging Narratives**: Capturing evolving themes such as digital activism, climate anxiety, and other novel discourses.
 
 ---
 
