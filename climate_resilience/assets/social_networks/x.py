@@ -178,7 +178,7 @@ def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwa
     ins={
         "x_conversations": AssetIn(
             key=["social_networks", "x_conversations"],
-            partition_mapping=TimeWindowPartitionMapping(start_offset=-12),
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-4),
         )
     },
     partitions_def=three_hour_partition_def,
