@@ -19,7 +19,7 @@ final as (
 
         social_network_source,
         conversation_natural_key,
-        classification,
+        is_climate_conversation,
         event_summary,
         earliest_post_creation_ts,
     

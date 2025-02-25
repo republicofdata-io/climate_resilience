@@ -35,7 +35,7 @@ merge_sources as (
 
   select 
     base.*,
-    s_conversation_classifications.classification as classification,
+    s_conversation_classifications.is_climate_conversation as is_climate_conversation,
     s_conversation_event_summaries.event_summary
 
   from base
@@ -56,7 +56,7 @@ dedup as (
         first_value(media_source ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as media_source,
         first_value(article_url ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as article_url,
         first_value(earliest_post_creation_ts ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as earliest_post_creation_ts,
-        first_value(classification ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as classification,
+        first_value(is_climate_conversation ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as is_climate_conversation,
         first_value(event_summary ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as event_summary
 
     from merge_sources
