@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime
-from typing import TypedDict
+from pydantic import BaseModel, Field
 
 import pandas as pd
 from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
@@ -13,17 +13,27 @@ from ...partitions import three_hour_partition_def
 from ...utils.conversations import assemble_conversations
 
 
-class ConversationClassification(TypedDict):
-    conversation_id: str
-    classification: str
-    partition_time: datetime
+class PostAssociation(BaseModel):
+    """Association between post and discourse"""
+
+    post_id: str = Field(description="A post's id")
+    post_type: str = Field(description="Classification of the type of post")
+    discourse_category: str = Field(description="The associated discourse category's label.")
+    discourse_sub_category: str = Field(description="The associated discourse sub-category's label.")
+    narrative: str = Field(description="A concise summary of the post's underlying perspective or storyline.")
+    justification: str = Field(description="A detailed explanation of how the discourse category, sub-category, and narrative were determined, referencing key textual elements or rhetorical cues in the post.")
+    confidence: float = Field(description="A confidence score (0-1) indicating the certainty of the discourse and narrative classification.")
+    partition_time: datetime = Field(description="The time at which the post was classified.")
 
 
-class PostAssociation(TypedDict):
-    post_id: str
-    discourse_type: str
-    narrative: str
-    partition_time: datetime
+class ConversationClassification(BaseModel):
+    """Classify if a conversation is about climate change"""
+
+    conversation_id: str = Field(description="A conversation's id")
+    classification: bool = Field(
+        description="Whether the conversation is about climate change"
+    )
+    partition_time: datetime = Field(description="The time at which the conversation was classified.")
 
 
 @asset(
@@ -145,6 +155,12 @@ def conversation_classifications(
         "conversation_event_summary": AssetIn(
             key=["narratives", "conversation_event_summary"],
         ),
+        "articles": AssetIn(
+            key=["media", "nytimes_articles"],
+            partition_mapping=TimeWindowPartitionMapping(
+                start_offset=-12, end_offset=0
+            ),
+        ),
     },
     partitions_def=three_hour_partition_def,
     metadata={"partition_expr": "partition_time"},
@@ -157,6 +173,7 @@ def post_narrative_associations(
     x_conversation_posts,
     conversation_classifications,
     conversation_event_summary,
+    articles,
     gcp_resource: BigQueryResource,
 ):
     # Log upstream asset's partition keys
@@ -171,6 +188,9 @@ def post_narrative_associations(
     )
     context.log.info(
         f"Partition key range for conversation_event_summary: {context.asset_partition_key_range_for_input('conversation_event_summary')}"
+    )
+    context.log.info(
+        f"Partition key range for articles: {context.asset_partition_key_range_for_input('articles')}"
     )
 
     # Get partition's time
@@ -207,7 +227,8 @@ def post_narrative_associations(
             conversations=x_conversations,
             posts=x_conversation_posts,
             classifications=conversation_classifications,
-            event_summary=event_summary_df,
+            event_summaries=event_summary_df,
+            articles=articles,
         )
         context.log.info(
             f"Associating discourse type and extracting narrative for {len(conversations_df)} social network conversation posts."
@@ -215,35 +236,48 @@ def post_narrative_associations(
 
         # Iterate over all conversations and classify them
         for _, conversation_post in conversations_df.iterrows():
-            conversation_post_dict = conversation_post.to_dict()
-            conversation_post_json = json.dumps(conversation_post_dict)
-            context.log.info(
-                f"Associate discourse type and extract narrative for the following post: {conversation_post_json}"
-            )
-
             try:
                 post_association_output = post_association_agent.invoke(
-                    {"conversation_post_json": conversation_post_json}
+                    {
+                        "post_id": conversation_post["post_id"],
+                        "event_summary": conversation_post["event_summary"],
+                        "initial_post_text": conversation_post["initial_post_text"],
+                        "post_text": conversation_post["post_text"],
+                    }
                 )
-                context.log.info(f"Output: {post_association_output}")
+                associations_list = list(post_association_output.post_associations)
 
-                for association in post_association_output.post_associations:
+                for association in associations_list:
+                    context.log.info(f"Processing association: {association}")
+
                     post_associations.append(
                         PostAssociation(
                             post_id=association.post_id,
-                            discourse_type=association.discourse,
+                            post_type=association.post_type,
+                            discourse_category=association.discourse_category,  # <-- Check if `category` exists
+                            discourse_sub_category=association.discourse_sub_category,  # <-- Check if `sub_category` exists
                             narrative=association.narrative,
+                            justification=association.justification,
+                            confidence=association.confidence,
                             partition_time=partition_time,
                         )
                     )
 
             except Exception as e:
-                print(f"Failed to associate posts")
-                print(e)
+                context.log.error(f"Failed to associate posts")
+                context.log.error(e)
 
     if post_associations:
-        # Convert list of associations to DataFrame
-        post_associations_df = pd.DataFrame(post_associations)
+        # Convert list of PostAssociation objects to list of dicts
+        post_associations_dicts = [assoc.dict() for assoc in post_associations]
+
+        # Convert to DataFrame
+        post_associations_df = pd.DataFrame(post_associations_dicts)
+
+        # Ensure column names are strings
+        post_associations_df.columns = post_associations_df.columns.map(str)
+
+        context.log.info(f"Final DataFrame before yielding: {post_associations_df}")
 
         # Return asset
         yield Output(

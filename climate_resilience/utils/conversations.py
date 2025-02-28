@@ -4,60 +4,58 @@ import pandas as pd
 
 
 def assemble_conversations(
-    context, conversations, posts, classifications=None, event_summary=None
+    context, conversations, posts, classifications, event_summaries, articles
 ):
-    # Assemble full conversations
-    assembled_conversations = (
-        (
-            pd.merge(
-                conversations,
-                posts,
-                how="left",
-                on="tweet_conversation_id",
-            )
-        )
-        .assign(
-            tweet_id=lambda x: x["tweet_id_y"].combine_first(x["tweet_id_x"]),
-            tweet_text=lambda x: x["tweet_text_y"].combine_first(x["tweet_text_x"]),
-            tweet_created_at=lambda x: x["tweet_created_at_y"].combine_first(
-                x["tweet_created_at_x"]
-            ),
-        )
-        .assign(
-            tweet_created_at=lambda df: df["tweet_created_at"].apply(
-                lambda ts: ts.isoformat() if pd.notnull(ts) else None
-            )
-        )
-        .loc[:, ["tweet_conversation_id", "tweet_id", "tweet_text", "tweet_created_at"]]
-        .drop_duplicates()
-        .sort_values(by=["tweet_conversation_id", "tweet_created_at"])
+    # Create base dataframe of all posts coming from both conversations and posts
+    assembled_conversations = conversations[['tweet_id', 'tweet_conversation_id', 'tweet_created_at', 'tweet_text', 'article_url']]
+    assembled_conversations = pd.concat([
+        assembled_conversations,
+        posts[['tweet_id', 'tweet_conversation_id', 'tweet_created_at', 'tweet_text', 'article_url']]
+        ], ignore_index=True)
+
+    # Join conversations to that base dataframe
+    assembled_conversations = pd.merge(
+        assembled_conversations, conversations[['tweet_conversation_id', 'tweet_text']], how='left', on='tweet_conversation_id'
+    )
+    assembled_conversations = assembled_conversations.rename(
+        columns={
+            'tweet_id': 'post_id', 
+            'tweet_conversation_id': 'post_conversation_id', 
+            'tweet_created_at': 'post_created_at', 
+            'tweet_text_x': 'post_text',
+            'tweet_article_url': 'article_url',
+            'tweet_text_y': 'initial_post_text'
+        })
+
+    # Join articles
+    articles = articles.rename(columns={'link': 'article_url', 'summary': 'article_summary'})
+    assembled_conversations = pd.merge(
+        assembled_conversations, articles[['article_url', 'article_summary']], how='left', on='article_url'
     )
 
-    # Remove user mentions from tweet_text
-    assembled_conversations["tweet_text"] = assembled_conversations["tweet_text"].apply(
-        lambda x: re.sub(r"@\w+", "", x).strip()
+    # Join event summaries
+    event_summaries = event_summaries.rename(columns={'CONVERSATION_ID': 'post_conversation_id', 'EVENT_SUMMARY': 'event_summary'})
+    assembled_conversations = pd.merge(
+        assembled_conversations, event_summaries[['post_conversation_id', 'event_summary']], how='left', on='post_conversation_id'
     )
+    
+    # Coalesce event summaries and article summaries
+    assembled_conversations['event_summary'] = assembled_conversations['event_summary'].combine_first(assembled_conversations['article_summary'])
 
-    # Filter conversations by classification if provided
-    if classifications is not None:
-        assembled_conversations = pd.merge(
-            assembled_conversations,
-            classifications,
-            left_on="tweet_conversation_id",
-            right_on="conversation_id",
-        ).drop(columns=["conversation_id", "partition_time"])
-
-        assembled_conversations = assembled_conversations[
-            assembled_conversations["classification"].astype(bool)
-        ]
-
-    # Add event summary to conversations if provided
-    if event_summary is not None:
-        assembled_conversations = pd.merge(
-            assembled_conversations,
-            event_summary,
-            left_on="tweet_conversation_id",
-            right_on="CONVERSATION_ID",
-        ).drop(columns=["CONVERSATION_ID", "RESEARCH_CYCLES", "PARTITION_TIME"])
+    # Filter by classifcation
+    classifications = classifications.rename(columns={'conversation_id': 'post_conversation_id'})
+    assembled_conversations = pd.merge(
+        assembled_conversations, classifications[['post_conversation_id', 'classification']], how='left', on='post_conversation_id'
+    )
+    assembled_conversations = assembled_conversations[assembled_conversations['classification'] == 'True']
+    
+    # Final selection of columns
+    assembled_conversations = assembled_conversations[[
+        'post_id', 
+        'post_conversation_id', 
+        'post_created_at', 
+        'post_text', 
+        'initial_post_text',
+        'event_summary']]
 
     return assembled_conversations
