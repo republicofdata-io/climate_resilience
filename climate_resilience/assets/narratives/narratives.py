@@ -227,7 +227,7 @@ def post_narrative_associations(
             conversations=x_conversations,
             posts=x_conversation_posts,
             classifications=conversation_classifications,
-            event_summary=event_summary_df,
+            event_summaries=event_summary_df,
             articles=articles,
         )
         context.log.info(
@@ -245,15 +245,17 @@ def post_narrative_associations(
                         "post_text": conversation_post["post_text"],
                     }
                 )
-                context.log.info(f"Output: {post_association_output}")
+                associations_list = list(post_association_output.post_associations)
 
-                for association in post_association_output.post_associations:
+                for association in associations_list:
+                    context.log.info(f"Processing association: {association}")
+
                     post_associations.append(
                         PostAssociation(
                             post_id=association.post_id,
                             post_type=association.post_type,
-                            discourse_category=association.category,
-                            discourse_sub_category=association.sub_category,
+                            discourse_category=association.discourse_category,  # <-- Check if `category` exists
+                            discourse_sub_category=association.discourse_sub_category,  # <-- Check if `sub_category` exists
                             narrative=association.narrative,
                             justification=association.justification,
                             confidence=association.confidence,
@@ -262,12 +264,20 @@ def post_narrative_associations(
                     )
 
             except Exception as e:
-                print(f"Failed to associate posts")
-                print(e)
+                context.log.error(f"Failed to associate posts")
+                context.log.error(e)
 
     if post_associations:
-        # Convert list of associations to DataFrame
-        post_associations_df = pd.DataFrame(post_associations)
+        # Convert list of PostAssociation objects to list of dicts
+        post_associations_dicts = [assoc.dict() for assoc in post_associations]
+
+        # Convert to DataFrame
+        post_associations_df = pd.DataFrame(post_associations_dicts)
+
+        # Ensure column names are strings
+        post_associations_df.columns = post_associations_df.columns.map(str)
+
+        context.log.info(f"Final DataFrame before yielding: {post_associations_df}")
 
         # Return asset
         yield Output(
