@@ -28,7 +28,9 @@ final as (
 
         post_url,
         post_text,
-        discourse_type,
+        post_type,
+        discourse_category,
+        discourse_sub_category,
         narrative,
 
         post_creation_ts
