@@ -80,15 +80,17 @@ def conversation_classifications(
     if not x_conversations.empty:
         # Assemble full conversations
         conversations_df = assemble_conversations(
-            context, conversations=x_conversations, posts=x_conversation_posts
+            context, 
+            conversations=x_conversations, 
+            posts=x_conversation_posts
         )
 
         # Group by tweet_conversation_id and aggregate tweet_texts into a list ordered by tweet_created_at
         conversations_df = (
-            conversations_df.groupby("tweet_conversation_id")
+            conversations_df.groupby("post_conversation_id")
             .apply(
-                lambda x: x.sort_values("tweet_created_at")[
-                    ["tweet_id", "tweet_created_at", "tweet_text"]
+                lambda x: x.sort_values("post_created_at")[
+                    ["post_id", "post_created_at", "post_text"]
                 ].to_dict(orient="records")
             )
             .reset_index(name="posts")
@@ -101,7 +103,7 @@ def conversation_classifications(
         # Iterate over all conversations and classify them
         for _, conversation_df in conversations_df.iterrows():
             conversation_dict = conversation_df.to_dict()
-            conversation_json = json.dumps(conversation_dict)
+            conversation_json = json.dumps(conversation_dict, default=str)
             context.log.info(f"Classifying conversation: {conversation_json}")
 
             conversation_classifications_output = (
@@ -112,7 +114,7 @@ def conversation_classifications(
 
             conversation_classifications.append(
                 ConversationClassification(
-                    conversation_id=conversation_dict["tweet_conversation_id"],
+                    conversation_id=conversation_dict["post_conversation_id"],
                     classification=str(
                         conversation_classifications_output.dict()["classification"]
                     ),
@@ -121,8 +123,17 @@ def conversation_classifications(
             )
 
     if conversation_classifications:
-        # Convert list of classifications to DataFrame
-        conversation_classifications_df = pd.DataFrame(conversation_classifications)
+        # Convert list of PostAssociation objects to list of dicts
+        conversation_classifications_dicts = [assoc.dict() for assoc in conversation_classifications]
+
+        # Convert to DataFrame
+        conversation_classifications_df = pd.DataFrame(conversation_classifications_dicts)
+        conversation_classifications_df['classification'] = conversation_classifications_df['classification'].astype(str)
+
+        # Ensure column names are strings
+        conversation_classifications_df.columns = conversation_classifications_df.columns.map(str)
+
+        context.log.info(f"Final DataFrame before yielding: {conversation_classifications_df}")
 
         # Return asset
         yield Output(
