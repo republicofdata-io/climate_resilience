@@ -4,7 +4,7 @@ import pandas as pd
 
 
 def assemble_conversations(
-    context, conversations, posts, classifications, event_summaries, articles
+    context, conversations, posts, classifications=None, event_summaries=None, articles=None
 ):
     # Create base dataframe of all posts coming from both conversations and posts
     assembled_conversations = conversations[['tweet_id', 'tweet_conversation_id', 'tweet_created_at', 'tweet_text', 'article_url']]
@@ -28,26 +28,35 @@ def assemble_conversations(
         })
 
     # Join articles
-    articles = articles.rename(columns={'link': 'article_url', 'summary': 'article_summary'})
-    assembled_conversations = pd.merge(
-        assembled_conversations, articles[['article_url', 'article_summary']], how='left', on='article_url'
-    )
+    if articles is not None:
+        articles = articles.rename(columns={'link': 'article_url', 'summary': 'article_summary'})
+        assembled_conversations = pd.merge(
+            assembled_conversations, articles[['article_url', 'article_summary']], how='left', on='article_url'
+        )
 
     # Join event summaries
-    event_summaries = event_summaries.rename(columns={'CONVERSATION_ID': 'post_conversation_id', 'EVENT_SUMMARY': 'event_summary'})
-    assembled_conversations = pd.merge(
-        assembled_conversations, event_summaries[['post_conversation_id', 'event_summary']], how='left', on='post_conversation_id'
-    )
+    if event_summaries is not None:
+        event_summaries = event_summaries.rename(columns={'CONVERSATION_ID': 'post_conversation_id', 'EVENT_SUMMARY': 'event_summary'})
+        assembled_conversations = pd.merge(
+            assembled_conversations, event_summaries[['post_conversation_id', 'event_summary']], how='left', on='post_conversation_id'
+        )
     
     # Coalesce event summaries and article summaries
-    assembled_conversations['event_summary'] = assembled_conversations['event_summary'].combine_first(assembled_conversations['article_summary'])
+    if 'event_summary' in assembled_conversations.columns:
+        assembled_conversations['event_summary'] = assembled_conversations['event_summary'].combine_first(assembled_conversations['article_summary'])
+    else:
+        if 'article_summary' in assembled_conversations.columns:
+            assembled_conversations['event_summary'] = assembled_conversations['article_summary']
+        else:
+            assembled_conversations['event_summary'] = None
 
     # Filter by classifcation
-    classifications = classifications.rename(columns={'conversation_id': 'post_conversation_id'})
-    assembled_conversations = pd.merge(
-        assembled_conversations, classifications[['post_conversation_id', 'classification']], how='left', on='post_conversation_id'
-    )
-    assembled_conversations = assembled_conversations[assembled_conversations['classification'] == 'True']
+    if classifications is not None:
+        classifications = classifications.rename(columns={'conversation_id': 'post_conversation_id'})
+        assembled_conversations = pd.merge(
+            assembled_conversations, classifications[['post_conversation_id', 'classification']], how='left', on='post_conversation_id'
+        )
+        assembled_conversations = assembled_conversations[assembled_conversations['classification'] == 'True']
     
     # Final selection of columns
     assembled_conversations = assembled_conversations[[
