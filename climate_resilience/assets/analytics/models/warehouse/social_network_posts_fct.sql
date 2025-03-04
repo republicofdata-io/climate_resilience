@@ -32,6 +32,7 @@ final as (
         discourse_category,
         discourse_sub_category,
         narrative,
+        justification,
 
         post_creation_ts
     

@@ -20,7 +20,17 @@ base as (
     
     from source
 
+),
+
+dedup as (
+    select *,
+        ROW_NUMBER() OVER (
+            PARTITION BY post_natural_key, social_network_source 
+            ORDER BY partition_ts
+        ) as row_num
+    from base
 )
 
-select * from base
+select * from dedup
+where row_num = 1
 order by partition_ts, post_natural_key

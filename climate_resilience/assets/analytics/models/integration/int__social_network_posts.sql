@@ -86,7 +86,8 @@ final as (
         s_post_narrative_associations.post_type,
         s_post_narrative_associations.discourse_category,
         s_post_narrative_associations.discourse_sub_category,
-        s_post_narrative_associations.narrative
+        s_post_narrative_associations.narrative,
+        s_post_narrative_associations.justification
 
     from dedup
     left join s_post_narrative_associations
