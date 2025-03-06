@@ -1,12 +1,12 @@
 import json
 import os
 from datetime import datetime
-from pydantic import BaseModel, Field
 
-import pandas as pd
 import dagster as dg
+import pandas as pd
 from dagster_gcp import BigQueryResource
 from google.api_core.exceptions import GoogleAPIError
+from pydantic import BaseModel, Field
 
 from ...agents import conversation_classification_agent, post_association_agent
 from ...partitions import three_hour_partition_def
@@ -18,12 +18,24 @@ class PostAssociation(BaseModel):
 
     post_id: str = Field(description="A post's id")
     post_type: str = Field(description="Classification of the type of post")
-    discourse_category: str = Field(description="The associated discourse category's label.")
-    discourse_sub_category: str = Field(description="The associated discourse sub-category's label.")
-    narrative: str = Field(description="A concise summary of the post's underlying perspective or storyline.")
-    justification: str = Field(description="A detailed explanation of how the discourse category, sub-category, and narrative were determined, referencing key textual elements or rhetorical cues in the post.")
-    confidence: float = Field(description="A confidence score (0-1) indicating the certainty of the discourse and narrative classification.")
-    partition_time: datetime = Field(description="The time at which the post was classified.")
+    discourse_category: str = Field(
+        description="The associated discourse category's label."
+    )
+    discourse_sub_category: str = Field(
+        description="The associated discourse sub-category's label."
+    )
+    narrative: str = Field(
+        description="A concise summary of the post's underlying perspective or storyline."
+    )
+    justification: str = Field(
+        description="A detailed explanation of how the discourse category, sub-category, and narrative were determined, referencing key textual elements or rhetorical cues in the post."
+    )
+    confidence: float = Field(
+        description="A confidence score (0-1) indicating the certainty of the discourse and narrative classification."
+    )
+    partition_time: datetime = Field(
+        description="The time at which the post was classified."
+    )
 
 
 class ConversationClassification(BaseModel):
@@ -33,7 +45,9 @@ class ConversationClassification(BaseModel):
     classification: bool = Field(
         description="Whether the conversation is about climate change"
     )
-    partition_time: datetime = Field(description="The time at which the conversation was classified.")
+    partition_time: datetime = Field(
+        description="The time at which the conversation was classified."
+    )
 
 
 @dg.asset(
@@ -43,11 +57,15 @@ class ConversationClassification(BaseModel):
     ins={
         "x_conversations": dg.AssetIn(
             key=["social_networks", "x_conversations"],
-            partition_mapping=dg.TimeWindowPartitionMapping(start_offset=-4, end_offset=-4),
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=-4
+            ),
         ),
         "x_conversation_posts": dg.AssetIn(
             key=["social_networks", "x_conversation_posts"],
-            partition_mapping=dg.TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=0
+            ),
         ),
     },
     partitions_def=three_hour_partition_def,
@@ -78,9 +96,7 @@ def conversation_classifications(
     if not x_conversations.empty:
         # Assemble full conversations
         conversations_df = assemble_conversations(
-            context, 
-            conversations=x_conversations, 
-            posts=x_conversation_posts
+            context, conversations=x_conversations, posts=x_conversation_posts
         )
 
         # Group by tweet_conversation_id and aggregate tweet_texts into a list ordered by tweet_created_at
@@ -122,16 +138,26 @@ def conversation_classifications(
 
     if conversation_classifications:
         # Convert list of PostAssociation objects to list of dicts
-        conversation_classifications_dicts = [assoc.dict() for assoc in conversation_classifications]
+        conversation_classifications_dicts = [
+            assoc.dict() for assoc in conversation_classifications
+        ]
 
         # Convert to DataFrame
-        conversation_classifications_df = pd.DataFrame(conversation_classifications_dicts)
-        conversation_classifications_df['classification'] = conversation_classifications_df['classification'].astype(str)
+        conversation_classifications_df = pd.DataFrame(
+            conversation_classifications_dicts
+        )
+        conversation_classifications_df["classification"] = (
+            conversation_classifications_df["classification"].astype(str)
+        )
 
         # Ensure column names are strings
-        conversation_classifications_df.columns = conversation_classifications_df.columns.map(str)
+        conversation_classifications_df.columns = (
+            conversation_classifications_df.columns.map(str)
+        )
 
-        context.log.info(f"Final DataFrame before yielding: {conversation_classifications_df}")
+        context.log.info(
+            f"Final DataFrame before yielding: {conversation_classifications_df}"
+        )
 
         # Return asset
         yield dg.Output(
@@ -155,17 +181,18 @@ def conversation_classifications(
         ),
         "x_conversation_posts": dg.AssetIn(
             key=["social_networks", "x_conversation_posts"],
-            partition_mapping=dg.TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=0
+            ),
         ),
         "conversation_classifications": dg.AssetIn(
             key=["narratives", "conversation_classifications"],
-            partition_mapping=dg.TimeWindowPartitionMapping(start_offset=0, end_offset=0),
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=0, end_offset=0
+            ),
         ),
         "conversation_event_summary": dg.AssetIn(
             key=["narratives", "conversation_event_summary"],
-            partition_mapping=dg.TimeWindowPartitionMapping(
-                allow_nonexistent_upstream_partitions=True
-            )
         ),
         "articles": dg.AssetIn(
             key=["media", "nytimes_articles"],
