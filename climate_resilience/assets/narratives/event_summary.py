@@ -90,6 +90,18 @@ def conversation_event_summary(
                 f"Number of posts for conversation {conversation['tweet_conversation_id']}: {len(conversation_list)}"
             )
 
+            # Append article's title and summary to the conversation
+            article_url = None
+            article_title = None
+            article_summary = None
+
+            for _, article in articles.iterrows():
+                if article["link"] == conversation["article_url"]:
+                    article_url = article["link"]
+                    article_title = article["title"]
+                    article_summary = article["summary"]
+                    break
+
             if len(conversation_list) >= 2:
                 context.log.info(
                     f"Launching Investigative Reporter AI Agent for conversation {conversation['tweet_conversation_id']}"
@@ -101,18 +113,6 @@ def conversation_event_summary(
                     [f"- {tweet}" for tweet in conversation_list]
                 )
                 context.log.info(f"Conversation: {conversation_markdown}")
-
-                # Append article's title and summary to the conversation
-                article_url = None
-                article_title = None
-                article_summary = None
-
-                for _, article in articles.iterrows():
-                    if article["link"] == conversation["article_url"]:
-                        article_url = article["link"]
-                        article_title = article["title"]
-                        article_summary = article["summary"]
-                        break
 
                 conversation = Conversation(
                     id=conversation["tweet_conversation_id"],
@@ -144,6 +144,14 @@ def conversation_event_summary(
                     partition_time=partition_time,
                 )
 
+                event_summaries.append(event_summary)
+            else:
+                event_summary = EventSummary(
+                    conversation_id=conversation["tweet_conversation_id"],
+                    event_summary=article_summary,
+                    research_cycles=0,
+                    partition_time=partition_time,
+                )
                 event_summaries.append(event_summary)
 
     if event_summaries:
