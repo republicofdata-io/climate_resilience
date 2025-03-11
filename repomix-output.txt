@@ -1,0 +1,4168 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+================================================================
+File Summary
+================================================================
+
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+Usage Guidelines:
+-----------------
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+Notes:
+------
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+
+Additional Info:
+----------------
+
+================================================================
+Directory Structure
+================================================================
+.github/
+  workflows/
+    branch_deployments.yml
+    deploy.yml
+climate_resilience/
+  agents/
+    __init__.py
+    conversation_classification_agent.py
+    conversation_event_summary_agent.py
+    post_association_agent.py
+  assets/
+    analytics/
+      models/
+        integration/
+          int__media_articles.sql
+          int__social_network_conversations.sql
+          int__social_network_posts.sql
+          int__social_network_user_profiles.sql
+        staging/
+          media/
+            stg__nytimes_articles.sql
+          narratives/
+            stg__conversation_classifications.sql
+            stg__conversation_event_summaries.sql
+            stg__post_narrative_associations.sql
+          social_networks/
+            stg__user_geolocations.sql
+            stg__x_conversation_posts.sql
+            stg__x_conversations.sql
+          sources.yml
+        warehouse/
+          media_articles_fct.sql
+          social_network_conversations_dim.sql
+          social_network_posts_fct.sql
+          social_network_user_profiles_dim.sql
+      __init__.py
+      dbt_project.yml
+      packages.yml
+      profiles.yml
+    media/
+      __init__.py
+      media.py
+    narratives/
+      __init__.py
+      event_summary.py
+      narratives.py
+    social_networks/
+      __init__.py
+      geolocation.py
+      x.py
+  io_managers/
+    __init__.py
+  jobs/
+    __init__.py
+  partitions/
+    __init__.py
+  resources/
+    __init__.py
+    gcp_resource.py
+    proxycurl_resource.py
+    supabase_resource.py
+    x_resource.py
+  schedules/
+    __init__.py
+  utils/
+    conversations.py
+  __init__.py
+design/
+  semantic_layer.dbml
+documentation/
+  climate_discourse_framework.md
+.gitignore
+=
+CLAUDE.md
+dagster_cloud_post_install.sh
+dagster_cloud_pre_install.sh
+dagster_cloud.yaml
+dagster.yaml
+Makefile
+pyproject.toml
+README.md
+setup.py
+
+================================================================
+Files
+================================================================
+
+================
+File: .github/workflows/branch_deployments.yml
+================
+name: Serverless Branch Deployments
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  # Cancel in-progress deploys to same branch
+  group: ${{ github.ref }}/branch_deployments
+  cancel-in-progress: true
+env:
+  DAGSTER_CLOUD_URL: "http://republicofdata-io.dagster.cloud"
+  DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+  ENABLE_FAST_DEPLOYS: "false"
+  PYTHON_VERSION: "3.9"
+  DAGSTER_CLOUD_FILE: "dagster_cloud.yaml"
+
+jobs:
+  dagster_cloud_default_deploy:
+    name: Dagster Serverless Deploy
+    runs-on: ubuntu-20.04
+    outputs:
+      build_info: ${{ steps.parse-workspace.outputs.build_info }}
+
+    steps:
+      - name: Prerun Checks
+        id: prerun
+        uses: dagster-io/dagster-cloud-action/actions/utils/prerun@v0.1
+
+      - name: Launch Docker Deploy
+        if: steps.prerun.outputs.result == 'docker-deploy'
+        id: parse-workspace
+        uses: dagster-io/dagster-cloud-action/actions/utils/parse_workspace@v0.1
+        with:
+          dagster_cloud_file: $DAGSTER_CLOUD_FILE
+
+      - name: Checkout for Python Executable Deploy
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+          path: project-repo
+
+      - name: Python Executable Deploy
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: dagster-io/dagster-cloud-action/actions/build_deploy_python_executable@v0.1
+        with:
+          dagster_cloud_file: "$GITHUB_WORKSPACE/project-repo/$DAGSTER_CLOUD_FILE"
+          build_output_dir: "$GITHUB_WORKSPACE/build"
+          python_version: "${{ env.PYTHON_VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dagster_cloud_docker_deploy:
+    name: Docker Deploy
+    runs-on: ubuntu-20.04
+    if: needs.dagster_cloud_default_deploy.outputs.build_info
+    needs: dagster_cloud_default_deploy
+    strategy:
+      fail-fast: false
+      matrix:
+        location: ${{ fromJSON(needs.dagster_cloud_default_deploy.outputs.build_info) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Build and deploy to Dagster Cloud serverless
+        uses: dagster-io/dagster-cloud-action/actions/serverless_branch_deploy@v0.1
+        with:
+          dagster_cloud_api_token: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          location: ${{ toJson(matrix.location) }}
+          base_image: "python:${{ env.PYTHON_VERSION }}-slim"
+          # Uncomment to pass through Github Action secrets as a JSON string of key-value pairs
+          # env_vars: ${{ toJson(secrets) }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+================
+File: .github/workflows/deploy.yml
+================
+name: Serverless Prod Deployment
+on:
+  push:
+    branches:
+      - "main"
+      - "master"
+
+concurrency:
+  # Cancel in-progress deploys to same branch
+  group: ${{ github.ref }}/deploy
+  cancel-in-progress: true
+env:
+  DAGSTER_CLOUD_URL: "http://republicofdata-io.dagster.cloud"
+  DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+  ENABLE_FAST_DEPLOYS: "false"
+  PYTHON_VERSION: "3.9"
+  DAGSTER_CLOUD_FILE: "dagster_cloud.yaml"
+
+jobs:
+  dagster_cloud_default_deploy:
+    name: Dagster Serverless Deploy
+    runs-on: ubuntu-20.04
+    outputs:
+      build_info: ${{ steps.parse-workspace.outputs.build_info }}
+
+    steps:
+      - name: Prerun Checks
+        id: prerun
+        uses: dagster-io/dagster-cloud-action/actions/utils/prerun@v0.1
+
+      - name: Launch Docker Deploy
+        if: steps.prerun.outputs.result == 'docker-deploy'
+        id: parse-workspace
+        uses: dagster-io/dagster-cloud-action/actions/utils/parse_workspace@v0.1
+        with:
+          dagster_cloud_file: $DAGSTER_CLOUD_FILE
+
+      - name: Checkout for Python Executable Deploy
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+          path: project-repo
+
+      - name: Python Executable Deploy
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: dagster-io/dagster-cloud-action/actions/build_deploy_python_executable@v0.1
+        with:
+          dagster_cloud_file: "$GITHUB_WORKSPACE/project-repo/$DAGSTER_CLOUD_FILE"
+          build_output_dir: "$GITHUB_WORKSPACE/build"
+          python_version: "${{ env.PYTHON_VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dagster_cloud_docker_deploy:
+    name: Docker Deploy
+    runs-on: ubuntu-20.04
+    if: needs.dagster_cloud_default_deploy.outputs.build_info
+    needs: dagster_cloud_default_deploy
+    strategy:
+      fail-fast: false
+      matrix:
+        location: ${{ fromJSON(needs.dagster_cloud_default_deploy.outputs.build_info) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Build and deploy to Dagster Cloud serverless
+        uses: dagster-io/dagster-cloud-action/actions/serverless_prod_deploy@v0.1
+        with:
+          dagster_cloud_api_token: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          location: ${{ toJson(matrix.location) }}
+          base_image: "python:${{ env.PYTHON_VERSION }}-slim"
+          # Uncomment to pass through Github Action secrets as a JSON string of key-value pairs
+          # env_vars: ${{ toJson(secrets) }}
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+================
+File: climate_resilience/agents/__init__.py
+================
+from ..agents.conversation_classification_agent import (
+    initiate_conversation_classification_agent,
+)
+from ..agents.conversation_event_summary_agent import (
+    initiate_conversation_event_summary_agent,
+)
+from ..agents.post_association_agent import initiate_post_association_agent
+
+conversation_classification_agent = initiate_conversation_classification_agent()
+post_association_agent = initiate_post_association_agent()
+conversation_event_summary_agent = initiate_conversation_event_summary_agent()
+
+================
+File: climate_resilience/agents/conversation_classification_agent.py
+================
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from langsmith import traceable
+from pydantic import BaseModel, Field
+
+
+class ConversationClassification(BaseModel):
+    """Classify if a conversation is about climate change"""
+
+    conversation_id: str = Field(description="A conversation's id")
+    classification: bool = Field(
+        description="Whether the conversation is about climate change"
+    )
+
+
+# Agent to classify conversations as about climate change or not
+@traceable
+def initiate_conversation_classification_agent():
+    # Components
+    model = ChatOpenAI(model="gpt-4o-mini")
+    structured_model = model.with_structured_output(ConversationClassification)
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "human",
+                "Classify whether  this conversation is about climate change or not: {conversation_posts_json}",
+            ),
+        ]
+    )
+
+    # Task
+    chain = prompt_template | structured_model
+    return chain
+
+================
+File: climate_resilience/agents/conversation_event_summary_agent.py
+================
+from operator import add
+from typing import Annotated, Any, Dict, List, Literal
+
+from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
+from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
+
+model = ChatOpenAI(model="gpt-4o-mini")
+
+
+# LLM Chain - Notepad Completeness Assessment
+class Assessment(BaseModel):
+    completeness_assessment: bool = Field(
+        description="Assessment on whether to accumulated information in the notepad is sufficient for a meaningful event summary."
+    )
+    suggested_investigations: list[str] = Field(
+        description="Additional research tasks suggested to be able to generate a meaningful event summary"
+    )
+
+
+completeness_assessment_structured_model = model.with_structured_output(Assessment)
+
+completeness_assessment_prompt_template = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are an expert evaluator tasked with assessing the sufficiency of the information accumulated in the notepad for generating a meaningful and informative summary about an event. The notepad contains an article, a conversation about this article, and research findings.
+
+                Please analyze the notepad and determine:
+
+                    •	Sufficiency: Is there enough comprehensive and coherent information to draft a clear and informative summary of the event?
+                    •	Gaps: Are there any missing elements or gaps that require additional research?
+
+                Provide a concise assessment indicating whether the information is sufficient. If it is not sufficient, specify the areas that need further investigation.”            """,
+        ),
+        (
+            "human",
+            """Please provide an assessment of whether the following research findings are enough to generate a meaningful and informative summary of the event discussed in this conversation
+            
+            Article url: {article_url}
+
+            Article title: {article_title}
+
+            Article summary: {article_summary}
+            
+            Conversation: {conversation}
+            
+            Resarch findings: {research_findings}
+            
+            Avoid duplicating the tasks and only suggest new areas for investigation if necessary.""",
+        ),
+    ]
+)
+
+completeness_assessment_llm_chain = (
+    completeness_assessment_prompt_template | completeness_assessment_structured_model
+)
+
+
+## LLM Chain - Tool Choice
+class ToolChoice(BaseModel):
+    tool_choice: str = Field(
+        description="Tool selection between the following choices: 'Wikipedia', 'DuckDuckGo'"
+    )
+
+
+tool_choice_structured_model = model.with_structured_output(ToolChoice)
+
+tool_choice_prompt_template = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are an expert tasked with selecting the most appropriate tool to perform a research task.
+
+            You have the following tools available:
+            - **Wikipedia**: Best for looking up established, well-documented facts, historical data, background on general knowledge, and publicly known information.
+            - **DuckDuckGo**: Best for up-to-date web searches, news, real-time information, and information that may not be widely documented in an encyclopedia.
+            
+            Choose the most appropriate tool based on the nature of the research task provided.
+            """,
+        ),
+        (
+            "human",
+            """Research Task: {research_task}
+            
+            Based on the nature of this task, please choose between 'Wikipedia' and 'DuckDuckGo' as the tool that will provide the most relevant and useful information.
+            """,
+        ),
+    ]
+)
+
+tool_choice_llm_chain = tool_choice_prompt_template | tool_choice_structured_model
+
+
+## LLM Chain - Findings Summary
+class FindingsSummary(BaseModel):
+    summary: str = Field(description="A summary of the findings for the research task.")
+
+
+findings_summary_structured_model = model.with_structured_output(FindingsSummary)
+
+findings_summary_prompt_template = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are an expert tasked with generating a meaningful and informative summary of your findings for a research task you were given. Ensure that the summary is clear, informative, and answers the research task.
+            """,
+        ),
+        (
+            "human",
+            """Please provide a summary for the following research findings:
+            
+            Research task: {research_task}
+            
+            Research findings: {research_findings}
+            
+            Summarize the key takeaways.""",
+        ),
+    ]
+)
+
+findings_summary_llm_chain = (
+    findings_summary_prompt_template | findings_summary_structured_model
+)
+
+
+## LLM Chain - Event Summary Generation
+class EventSummary(BaseModel):
+    event_summary: str = Field(
+        description="A concise summary of the event being discussed in the conversation."
+    )
+
+
+event_summary_structured_model = model.with_structured_output(EventSummary)
+
+event_summary_prompt_template = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are an expert tasked with generating a concise event summaries based on an article, a conversation about this article and accumulated research findings.
+            
+            The goal is to produce a clear description of the event covered by the article, disccused in the conversation and summarize the most important findings.
+            
+            - The event summary should be **no longer than 2-3 paragraphs**.
+            - Do **not** include opinions or recommendations.
+            - Do **not** use bullet points or lists.
+            - Focus on describing the **essence of the event** and the key findings from the research in simple, cohesive text.""",
+        ),
+        (
+            "human",
+            """Please write a concise event summary that summarizes the following article, conversation and research findings.
+            
+            Article url: {article_url}
+
+            Article title: {article_title}
+
+            Article summary: {article_summary}
+            
+            Conversation: {conversation}
+            
+            Resarch findings: {research_findings}
+            
+            Ensure the event summary is in 2-3 paragraphs, avoids opinions or actions, and sticks to describing the event covered by the article, discussed in the conversation and the research findings.""",
+        ),
+    ]
+)
+
+event_summary_generation_llm_chain = (
+    event_summary_prompt_template | event_summary_structured_model
+)
+
+
+## Agent's State
+class Conversation(TypedDict):
+    id: str
+    conversation: str
+
+
+class Article(TypedDict):
+    url: str
+    title: str
+    summary: str
+
+
+class ResearchFindings(TypedDict):
+    task: str
+    completed: bool
+    tool_used: str
+    findings: Annotated[list[str], add]
+    summary: str
+
+
+class ResearchState(TypedDict):
+    conversation: Conversation
+    article: Article
+    completeness_assessment: bool
+    research_cycles: int
+    research_findings: Annotated[list[ResearchFindings], add]
+    event_summary: str
+
+
+## Tools
+wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
+duckduckgo = DuckDuckGoSearchRun()
+
+
+## Assessment Node
+def assessment_node(state: ResearchState) -> ResearchState:
+    print("---Assessment---")
+
+    # Prepare input values
+    research_findings_formatted = "\n".join(
+        [f"{i+1}. {rf['task']}" for i, rf in enumerate(state["research_findings"])]
+    )
+
+    # Invoke the LLM chain
+    output = completeness_assessment_llm_chain.invoke(
+        {
+            "article_url": state["article"]["url"],
+            "article_title": state["article"]["title"],
+            "article_summary": state["article"]["summary"],
+            "conversation": state["conversation"]["conversation"],
+            "research_findings": research_findings_formatted,
+        }
+    )
+
+    # Extract output elements
+    completeness_assessment = output.completeness_assessment
+    suggested_investigations = output.suggested_investigations
+
+    # Save output elements to agent's state
+    for investigation in suggested_investigations:
+        new_research_finding = {
+            "task": investigation,
+            "completed": False,
+            "tool_used": "",
+            "findings": [],  # Initially, findings are empty
+        }
+        state["research_findings"].append(new_research_finding)
+
+    print("Assessment:", completeness_assessment)
+    return {"completeness_assessment": completeness_assessment}
+
+
+## Research Node
+def research_node(state: ResearchState) -> ResearchState:
+    print("---Research---")
+
+    # Iterate over research findings and update incomplete tasks
+    for research_finding in state["research_findings"]:
+        if not research_finding["completed"]:  # Check if the task is incomplete
+            # Decide which investigative tool to use
+            tool_choice = tool_choice_llm_chain.invoke(research_finding["task"])
+            research_finding["tool_used"] = tool_choice
+
+            if tool_choice == "DuckDuckGo":
+                result = duckduckgo.invoke(research_finding["task"])
+            else:
+                result = wikipedia.run(research_finding["task"])
+
+            # Append result to the findings
+            research_finding["findings"].append(result or "No result found")
+
+            # Mark the task as completed
+            research_finding["completed"] = True
+
+            findings_summary = findings_summary_llm_chain.invoke(
+                {
+                    "research_task": research_finding["task"],
+                    "research_findings": research_finding["findings"],
+                }
+            )
+
+            research_finding["summary"] = findings_summary.summary
+
+    print("Research Cycles:", state["research_cycles"] + 1)
+    return {"research_cycles": state["research_cycles"] + 1}
+
+
+## Event Summary Writing Node
+def format_research_findings(research_findings: List[Dict[str, Any]]) -> str:
+    """
+    Formats the research findings into a structured string for the LLM prompt.
+
+    Args:
+        research_findings (List[Dict[str, Any]]): List of research findings with tasks, completed status, and findings.
+
+    Returns:
+        str: A formatted string that summarizes all the research findings.
+    """
+    formatted_findings = []
+
+    for i, finding in enumerate(research_findings, 1):
+        task = finding["task"]
+        completed = "Completed" if finding["completed"] else "Incomplete"
+        tool_used = finding["tool_used"] if finding["tool_used"] else "No tool used"
+        summary = finding["summary"] if finding["summary"] else "No findings"
+
+        # Formatting each research finding entry
+        formatted_findings.append(
+            f"Research Task {i}:\n"
+            f"  Task: {task}\n"
+            f"  Status: {completed}\n"
+            f"  Tool used: {tool_used}\n"
+            f"  Findings: {summary}"
+        )
+
+    # Join all the formatted findings into a single string
+    return "\n\n".join(formatted_findings)
+
+
+def write_event_summary_node(state: ResearchState) -> ResearchState:
+    print("---Write event summary---")
+
+    research_findings_formatted = format_research_findings(state["research_findings"])
+
+    output = event_summary_generation_llm_chain.invoke(
+        {
+            "article_url": state["article"]["url"],
+            "article_title": state["article"]["title"],
+            "article_summary": state["article"]["summary"],
+            "conversation": state["conversation"]["conversation"],
+            "research_findings": research_findings_formatted,
+        }
+    )
+
+    # The output will have the following structure:
+    event_summary = output.event_summary
+
+    print("Event Summary:", event_summary)
+    return {"event_summary": event_summary}
+
+
+## Edges
+def assess_notepad_completeness(state) -> Literal["research", "write_event_summary"]:
+    if state["completeness_assessment"] == True:
+        return "write_event_summary"
+
+    else:
+        return "research"
+
+
+def assess_research_limit(state) -> Literal["assessment", "write_event_summary"]:
+    if state["research_cycles"] >= 3:
+        return "write_event_summary"
+
+    else:
+        return "assessment"
+
+
+def initiate_conversation_event_summary_agent():
+    ## Agent
+    # Build graph
+    builder = StateGraph(ResearchState)
+    builder.add_node("assessment", assessment_node)
+    builder.add_node("research", research_node)
+    builder.add_node("write_event_summary", write_event_summary_node)
+
+    # Logic
+    builder.add_edge(START, "assessment")
+    builder.add_conditional_edges("assessment", assess_notepad_completeness)
+    builder.add_conditional_edges("research", assess_research_limit)
+    builder.add_edge("write_event_summary", END)
+
+    # Add
+    agent = builder.compile()
+
+    return agent
+
+================
+File: climate_resilience/agents/post_association_agent.py
+================
+from typing import List
+
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+from langsmith import traceable
+from pydantic import BaseModel, Field
+
+
+# Define classes for LLM task output
+class PostAssociation(BaseModel):
+    """Association between post and discourse"""
+
+    post_id: str = Field(description="A post's id")
+    post_type: str = Field(description="Classification of the type of post")
+    discourse_category: str = Field(description="The associated discourse category's label.")
+    discourse_sub_category: str = Field(description="The associated discourse sub-category's label.")
+    narrative: str = Field(description="A concise summary of the post's underlying perspective or storyline.")
+    justification: str = Field(description="A detailed explanation of how the discourse category, sub-category, and narrative were determined, referencing key textual elements or rhetorical cues in the post.")
+    confidence: float = Field(description="A confidence score (0-1) indicating the certainty of the discourse and narrative classification.")
+
+
+class PostAssociations(BaseModel):
+    """List of associations between posts and discourses"""
+
+    post_associations: List[PostAssociation]
+
+
+# Agent to classify posts to discourses
+@traceable
+def initiate_post_association_agent():
+    # Components
+    model = ChatOpenAI(model="gpt-4o-mini")
+    parser = PydanticOutputParser(pydantic_object=PostAssociations)
+
+    # Prompt
+    system_template = """
+    # IDENTITY and PURPOSE 
+    You are an expert at classifying discourses from social network conversation posts and identifying the narratives they express.
+
+    # STEPS
+    1. Ingest a JSON object containing a social media post that is part of a conversation about a climate event.
+    2. Consider:
+    - The **climate event summary** as context.
+    - The **initial post** that started the conversation.
+    - The **specific post** being classified.
+    3. Classify the post as one of the following types.
+    - **Opinion:** Posts where the user expresses a personal viewpoint.
+    - **Informative:** Posts providing factual information or sharing news.
+    - **Question:** Posts where the user is asking a question.
+    - **Other:** Posts that do not fit the above categories.
+    4. Assign the most appropriate **discourse category** and **sub-category** based on the taxonomy.
+    - If no category is relevant, assign **"N/A"**.
+    5. Identify the **narrative** the post expresses.
+    - A **narrative** is the underlying storyline, perspective, or assumption that gives meaning to the post.
+    - Examples:
+        - “Renewable energy is the only viable path forward.”
+        - “Climate change disproportionately affects marginalized communities.”
+        - “Climate change is a hoax created for political gain.”
+    - If no clear narrative exists, assign **"N/A"**.
+    6. Provide a **detailed justification** explaining why the category, sub-category, and narrative were chosen.
+    - Reference **key phrases, rhetorical cues, or logical reasoning** from the post.
+    - If the post is vague, mention **what information is missing**.
+
+    # DISCOURSE CATEGORIES
+    ## Biophysical
+    Climate change is an environmental problem that can be addressed through policies, technologies, and behavioral changes to reduce emissions and adapt to impacts.
+
+    ### Sub-Categories:
+    - Technological Solutions: Narratives about renewable energy, carbon capture, electric vehicles, and other innovations to combat climate change.
+    - Policy Advocacy: Calls for regulatory action such as carbon taxes, emissions caps, or international agreements to mitigate climate change.
+    - Behavioral Change: Discussions about individual actions like reducing waste, conserving energy, or adopting sustainable diets.
+    - Nature-Based Solutions: Emphasis on solutions like reforestation, wetlands restoration, and biodiversity conservation to address climate challenges.
+    - Disaster Preparedness: Focus on adaptation measures like planning and infrastructure to handle climate-induced disasters.
+
+    ## Critical
+    Climate change is a social problem caused by unsustainable economic, political, and cultural processes. Addressing it requires challenging power structures and unsustainable systems.
+
+    ### Sub-Categories:
+    - Climate Justice: Narratives highlighting equity issues and the disproportionate impact of climate change on marginalized or vulnerable communities.
+    - Fossil Fuel Opposition: Critiques of industries and systems that perpetuate emissions, including divestment and anti-fossil fuel campaigns.
+    - Economic Critique: Arguments against capitalism, overconsumption, and global economic systems that drive environmental degradation.
+    - Global Inequities: Discussions about the uneven responsibilities and impacts of climate change between the Global North and South.
+    - Corporate Accountability: Calls for corporations to take responsibility for their emissions, lobbying efforts, and greenwashing practices.
+
+    ## Dismissive
+    Climate change is not an urgent or real problem, and action to address it is either unnecessary or harmful.
+    
+    ### Sub-Categories:
+    - Climate Skepticism: Arguments disputing the existence or human-caused nature of climate change.
+    - Economic Prioritization: Claims that economic growth and jobs should take precedence over climate action.
+    - Downplaying Impacts: Narratives minimizing the consequences of climate change (e.g., “It’s natural,” “It’s not that bad”).
+    - Anti-Regulation: Opposition to government intervention, often framed as overreach or harmful to personal freedoms.
+    - Conspiracy Theories: Claims that climate change is a hoax or part of a larger political or financial conspiracy.
+
+    ## Integrative
+    Climate change is an environmental and social problem rooted in perceptions of human-environment relationships. Addressing it requires cultural and institutional change.
+
+    ### Sub-Categories:
+    - Systems Thinking: Narratives emphasizing the interconnectedness of human and environmental systems and the need for holistic solutions.
+    - Cultural Shifts: Calls for reframing humanity’s relationship with nature, often incorporating Indigenous knowledge or ecological worldviews.
+    - Sustainable Development: Discussions about balancing economic growth with environmental stewardship and social equity.
+    - Interdisciplinary Approaches: Combining insights from science, humanities, and policy to develop innovative solutions.
+    - Behavioral Science: Focus on psychological and cultural factors that influence climate action and decision-making.
+
+    # OUTPUT INSTRUCTIONS
+    {format_instructions}
+    """
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_template),
+            ("human",
+                """Now, classify the following social media post:
+                    - Post ID: {post_id}
+                    - Climate event summary: {event_summary}
+                    - Initial post from this conversation: {initial_post_text}
+                    - Post to classify: {post_text}
+                """
+            ),
+        ]
+    ).partial(format_instructions=parser.get_format_instructions())
+
+    # Task
+    chain = prompt_template | model | parser
+    return chain
+
+================
+File: climate_resilience/assets/analytics/models/integration/int__media_articles.sql
+================
+with s_nytimes_articles as (
+
+    select * from {{ ref('stg__nytimes_articles') }}
+
+) 
+
+select * from s_nytimes_articles
+
+================
+File: climate_resilience/assets/analytics/models/integration/int__social_network_conversations.sql
+================
+with s_social_network_posts as (
+
+    select * from {{ ref('int__social_network_posts') }}
+
+),
+
+s_conversation_classifications as (
+
+    select * from {{ ref('stg__conversation_classifications') }}
+
+),
+
+s_conversation_event_summaries as (
+
+    select * from {{ ref('stg__conversation_event_summaries') }}
+
+),
+
+base as (
+
+    select distinct
+        social_network_source,
+        conversation_natural_key,
+        media_source,
+        article_url,
+        min(post_creation_ts) as earliest_post_creation_ts,
+    
+    from s_social_network_posts
+
+    group by 1, 2, 3, 4
+
+),
+
+merge_sources as (
+
+  select 
+    base.*,
+    s_conversation_classifications.is_climate_conversation as is_climate_conversation,
+    s_conversation_event_summaries.event_summary
+
+  from base
+  left join s_conversation_classifications
+      on base.conversation_natural_key = s_conversation_classifications.conversation_natural_key
+      and base.social_network_source = s_conversation_classifications.social_network_source
+  left join s_conversation_event_summaries
+      on base.conversation_natural_key = s_conversation_event_summaries.conversation_natural_key
+      and base.social_network_source = s_conversation_event_summaries.social_network_source
+
+),
+
+dedup as (
+
+    select distinct
+        social_network_source,
+        conversation_natural_key,
+        first_value(media_source ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as media_source,
+        first_value(article_url ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as article_url,
+        first_value(earliest_post_creation_ts ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as earliest_post_creation_ts,
+        first_value(is_climate_conversation ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as is_climate_conversation,
+        first_value(event_summary ignore nulls) over (partition by conversation_natural_key order by earliest_post_creation_ts) as event_summary
+
+    from merge_sources
+
+)
+
+select * from dedup
+
+================
+File: climate_resilience/assets/analytics/models/integration/int__social_network_posts.sql
+================
+with s_x_conversations as (
+
+    select * from {{ ref('stg__x_conversations') }}
+
+),
+
+s_x_conversation_posts as (
+
+    select * from {{ ref('stg__x_conversation_posts') }}
+
+),
+
+s_post_narrative_associations as (
+
+    select * from {{ ref('stg__post_narrative_associations') }}
+
+),
+
+merge_sources as (
+
+    select
+        s_x_conversations.conversation_natural_key,
+        s_x_conversations.post_natural_key,
+        s_x_conversations.social_network_source,
+        
+        s_x_conversations.post_author_natural_key,
+
+        s_x_conversations.article_url,
+        s_x_conversations.media_source,
+        s_x_conversations.post_url,
+        s_x_conversations.post_text,
+        s_x_conversations.post_author,
+        s_x_conversations.post_author_location,
+        s_x_conversations.post_author_description,
+        s_x_conversations.post_metrics,
+        s_x_conversations.post_author_metrics,
+
+        s_x_conversations.post_creation_ts,
+        s_x_conversations.post_author_creation_ts,
+        s_x_conversations.article_publication_partition_ts,
+        s_x_conversations.record_loading_ts
+    
+    from s_x_conversations
+
+    union all
+
+    select
+        s_x_conversation_posts.conversation_natural_key,
+        s_x_conversation_posts.post_natural_key,
+        s_x_conversation_posts.social_network_source,
+       
+        s_x_conversation_posts.post_author_natural_key,
+
+        s_x_conversation_posts.article_url,
+        s_x_conversation_posts.media_source,
+        s_x_conversation_posts.post_url,
+        s_x_conversation_posts.post_text,
+        s_x_conversation_posts.post_author,
+        s_x_conversation_posts.post_author_location,
+        s_x_conversation_posts.post_author_description,
+        s_x_conversation_posts.post_metrics,
+        s_x_conversation_posts.post_author_metrics,
+
+        s_x_conversation_posts.post_creation_ts,
+        s_x_conversation_posts.post_author_creation_ts,
+        s_x_conversation_posts.article_publication_partition_ts,
+        s_x_conversation_posts.record_loading_ts
+    
+    from s_x_conversation_posts
+
+),
+
+dedup as (
+
+    select
+        *,
+        row_number() over (partition by post_natural_key order by record_loading_ts desc) as row_num
+    from merge_sources
+
+),
+
+final as (
+
+    select
+        dedup.*,
+        s_post_narrative_associations.post_type,
+        s_post_narrative_associations.discourse_category,
+        s_post_narrative_associations.discourse_sub_category,
+        s_post_narrative_associations.narrative,
+        s_post_narrative_associations.justification
+
+    from dedup
+    left join s_post_narrative_associations
+        on dedup.post_natural_key = s_post_narrative_associations.post_natural_key
+        and dedup.social_network_source = s_post_narrative_associations.social_network_source
+
+)
+
+select * from final
+order by post_creation_ts
+
+================
+File: climate_resilience/assets/analytics/models/integration/int__social_network_user_profiles.sql
+================
+{% set geolocation_dedup_partition_def = 'partition by social_network_profile_natural_key order by social_network_profile_location_order, social_network_profile_geolocation_ts RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING' %}
+
+with s_x_conversations as (
+
+    select * from {{ ref('stg__x_conversations') }}
+
+),
+
+s_x_conversation_posts as (
+
+    select * from {{ ref('stg__x_conversation_posts') }}
+
+),
+
+s_social_network_user_profile_geolocations as (
+
+    select * from {{ ref('stg__user_geolocations') }}
+
+),
+
+merge_sources as (
+
+    select
+        social_network_source,
+        post_author_natural_key,
+        post_author,
+        post_author_description,
+        post_author_creation_ts,
+        post_creation_ts
+    
+    from s_x_conversations
+
+    union all
+
+    select
+        social_network_source,
+        post_author_natural_key,
+        post_author,
+        post_author_description,
+        post_author_creation_ts,
+        post_creation_ts
+    
+    from s_x_conversation_posts
+
+),
+
+dedup_profiles as (
+
+    select distinct
+        social_network_source,
+        post_author_natural_key as social_network_profile_natural_key,
+        last_value(post_author) over (partition by post_author_natural_key order by post_author_creation_ts RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as social_network_profile_username,
+        last_value(post_author_description) over (partition by post_author_natural_key order by post_author_creation_ts RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as social_network_profile_description,
+        last_value(post_author_creation_ts) over (partition by post_author_natural_key order by post_author_creation_ts RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as social_network_profile_creation_ts
+    
+    from merge_sources
+
+),
+
+append_geolocations as (
+
+    select
+        dedup_profiles.social_network_source,
+        dedup_profiles.social_network_profile_natural_key,
+        dedup_profiles.social_network_profile_username,
+        dedup_profiles.social_network_profile_description,
+        dedup_profiles.social_network_profile_creation_ts,
+
+        s_social_network_user_profile_geolocations.social_network_profile_location_name,
+        s_social_network_user_profile_geolocations.social_network_profile_location_order,      
+        s_social_network_user_profile_geolocations.social_network_profile_location_country_name,
+        s_social_network_user_profile_geolocations.social_network_profile_location_country_code,
+        s_social_network_user_profile_geolocations.social_network_profile_location_admin1_name,
+        s_social_network_user_profile_geolocations.social_network_profile_location_admin1_code,
+        s_social_network_user_profile_geolocations.social_network_profile_location_latitude,
+        s_social_network_user_profile_geolocations.social_network_profile_location_longitude,
+        s_social_network_user_profile_geolocations.social_network_profile_geolocation_ts
+    
+    from dedup_profiles
+    left join s_social_network_user_profile_geolocations
+        on dedup_profiles.social_network_source = s_social_network_user_profile_geolocations.social_network_source
+        and dedup_profiles.social_network_profile_natural_key = s_social_network_user_profile_geolocations.social_network_profile_natural_key
+
+),
+
+dedup_geolocations as (
+
+    select distinct
+        social_network_source,
+        social_network_profile_natural_key,
+        social_network_profile_username,
+        social_network_profile_description,
+
+        first_value(social_network_profile_location_name ignore nulls) over ({{geolocation_dedup_partition_def}}) as social_network_profile_location_name,
+      
+        first_value(social_network_profile_location_country_name ignore nulls) over ({{geolocation_dedup_partition_def}}) as social_network_profile_location_country_name,
+        first_value(social_network_profile_location_country_code ignore nulls) over ({{geolocation_dedup_partition_def}}) as social_network_profile_location_country_code,
+        first_value(social_network_profile_location_admin1_name ignore nulls) over ({{geolocation_dedup_partition_def}}) as social_network_profile_location_admin1_name,
+        first_value(social_network_profile_location_admin1_code ignore nulls) over ({{geolocation_dedup_partition_def}}) as social_network_profile_location_admin1_code,
+        first_value(social_network_profile_location_latitude ignore nulls) over ({{geolocation_dedup_partition_def}}) as social_network_profile_location_latitude,
+        first_value(social_network_profile_location_longitude ignore nulls) over ({{geolocation_dedup_partition_def}}) as social_network_profile_location_longitude,
+
+        social_network_profile_creation_ts
+    
+    from append_geolocations
+
+),
+
+encode_h3_cells as (
+
+    select
+        *,
+        `carto-os`.carto.H3_FROMLONGLAT(social_network_profile_location_longitude, social_network_profile_location_latitude, 3) as social_network_profile_location_h3_r3
+    
+    from dedup_geolocations
+
+)
+
+select * from encode_h3_cells
+
+================
+File: climate_resilience/assets/analytics/models/staging/media/stg__nytimes_articles.sql
+================
+{% set partition_def = 'partition by article_url, media_source order by article_publication_ts RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING' %}
+
+with source as (
+
+    select * from {{ source('media', 'nytimes_articles') }}
+
+),
+
+base as (
+
+    select distinct
+        cast(link as string) as article_url,
+        'nytimes' as media_source,
+
+        cast(title as string) as article_title,
+        cast(summary as string) as article_summary,
+        cast(author as string) as article_author,
+        lower(cast(tags as string)) as article_tags,
+        cast(medias as string) as article_medias,
+
+        cast(published_ts as timestamp) as article_publication_ts
+    
+    from source
+
+),
+
+dedup as (
+    
+    select distinct
+        article_url,
+        media_source,
+        last_value(article_title) over ({{partition_def}}) as article_title,
+        last_value(article_summary) over ({{partition_def}}) as article_summary,
+        last_value(article_author) over ({{partition_def}}) as article_author,
+        last_value(article_tags) over ({{partition_def}}) as article_tags,
+        last_value(article_medias) over ({{partition_def}}) as article_medias,
+        first_value(article_publication_ts) over ({{partition_def}}) as article_publication_ts,
+        last_value(article_publication_ts) over ({{partition_def}}) as article_modification_ts
+    
+    from base  
+    
+),
+
+final as (
+
+    select
+        *,
+        {{ dbt_utils.generate_surrogate_key([
+            'article_url',
+            'media_source'
+        ]) }} as article_sk, 
+    
+    from dedup
+
+)
+
+select * from final
+order by article_publication_ts
+
+================
+File: climate_resilience/assets/analytics/models/staging/narratives/stg__conversation_classifications.sql
+================
+with source as (
+
+    select * from {{ source('narratives', 'conversation_classifications') }}
+
+),
+
+base as (
+
+    select distinct
+        cast(conversation_id as string) as conversation_natural_key,
+        'x' as social_network_source,
+
+        cast(classification as bool) as is_climate_conversation,
+        cast(partition_time as timestamp) as conversation_classification_partition_ts,
+    
+    from source
+
+)
+
+select * from base
+order by conversation_classification_partition_ts, conversation_natural_key
+
+================
+File: climate_resilience/assets/analytics/models/staging/narratives/stg__conversation_event_summaries.sql
+================
+with source as (
+
+    select * from {{ source('narratives', 'conversation_event_summaries') }}
+
+),
+
+base as (
+
+    select distinct
+        cast(conversation_id as string) as conversation_natural_key,
+        'x' as social_network_source,
+        cast(research_cycles as integer) as research_cycles,
+        cast(event_summary as string) as event_summary,
+
+    from source
+
+),
+
+dedup as (
+    
+        select
+            conversation_natural_key,
+            social_network_source,
+            research_cycles,
+            event_summary,
+            row_number() over (partition by conversation_natural_key order by conversation_natural_key) as row_number
+    
+        from base
+
+)
+
+select * from dedup
+where row_number = 1
+order by conversation_natural_key
+
+================
+File: climate_resilience/assets/analytics/models/staging/narratives/stg__post_narrative_associations.sql
+================
+with source as (
+
+    select * from {{ source('narratives', 'post_narrative_associations') }}
+
+),
+
+base as (
+
+    select distinct
+        cast(post_id as string) as post_natural_key,
+        'x' as social_network_source,
+        
+        cast(post_type as string) as post_type,
+        cast(discourse_category as string) as discourse_category,
+        cast(discourse_sub_category as string) as discourse_sub_category,
+        cast(narrative as string) as narrative,
+        cast(justification as string) as justification,
+        cast(confidence as float64) as confidence,
+        cast(partition_time as timestamp) as partition_ts,
+    
+    from source
+
+),
+
+dedup as (
+    select *,
+        ROW_NUMBER() OVER (
+            PARTITION BY post_natural_key, social_network_source 
+            ORDER BY partition_ts
+        ) as row_num
+    from base
+)
+
+select * from dedup
+where row_num = 1
+order by partition_ts, post_natural_key
+
+================
+File: climate_resilience/assets/analytics/models/staging/social_networks/stg__user_geolocations.sql
+================
+with source as (
+
+    select * from {{ source('social_networks', 'user_geolocations') }}
+
+),
+
+base as (
+
+    select distinct
+        cast(social_network_profile_id as string) as social_network_profile_natural_key,
+
+        'x' as social_network_source,
+        cast(social_network_profile_username as string) as social_network_profile_username,
+        cast(location as string) as social_network_profile_location_name,
+        cast(location_order as int) as social_network_profile_location_order,
+        
+        cast(countryname as string) as social_network_profile_location_country_name,
+        cast(countrycode as string) as social_network_profile_location_country_code,
+        cast(adminname1 as string) as social_network_profile_location_admin1_name,
+        cast(admincode1 as string) as social_network_profile_location_admin1_code,
+        cast(latitude as float64) as social_network_profile_location_latitude,
+        cast(longitude as float64) as social_network_profile_location_longitude,
+
+        cast(geolocation_ts as timestamp) as social_network_profile_geolocation_ts
+    
+    from source
+
+),
+
+final as (
+
+    select
+        *,
+        {{ dbt_utils.generate_surrogate_key([
+            'social_network_profile_natural_key',
+            'social_network_source'
+        ]) }} as social_network_user_profile_geolocation_sk, 
+    
+    from base
+
+)
+
+select * from final
+order by social_network_profile_geolocation_ts
+
+================
+File: climate_resilience/assets/analytics/models/staging/social_networks/stg__x_conversation_posts.sql
+================
+{% set partition_def = 'partition by post_natural_key, social_network_source order by record_loading_ts RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING' %}
+
+with source as (
+
+    select * from {{ source('social_networks', 'x_conversation_posts') }}
+
+),
+
+base as (
+
+    select distinct
+        cast(tweet_id as string) as post_natural_key,
+        'x' as social_network_source,
+        
+        cast(tweet_conversation_id as string) as conversation_natural_key,
+        cast(author_id as string) as post_author_natural_key,
+
+        cast(article_url as string) as article_url,
+        'nytimes' as media_source,
+        'https://twitter.com/' || cast(author_username as string) || '/status/' || cast(tweet_id as string) as post_url,
+        cast(tweet_text as string) as post_text,
+        cast(author_username as string) as post_author,
+        cast(author_location as string) as post_author_location,
+        cast(author_description as string) as post_author_description,
+        cast(tweet_public_metrics as string) as post_metrics,
+        cast(author_public_metrics as string) as post_author_metrics,
+
+        cast(tweet_created_at as timestamp) as post_creation_ts,
+        cast(author_created_at as timestamp) as post_author_creation_ts,
+        cast(partition_hour_utc_ts as timestamp) as article_publication_partition_ts,
+        cast(record_loading_ts as timestamp) as record_loading_ts
+    
+    from source
+
+),
+
+final as (
+    
+    select distinct
+        post_natural_key,
+        social_network_source,
+        last_value(conversation_natural_key) over ({{partition_def}}) as conversation_natural_key,
+        last_value(post_author_natural_key) over ({{partition_def}}) as post_author_natural_key,
+        last_value(article_url) over ({{partition_def}}) as article_url,
+        last_value(media_source) over ({{partition_def}}) as media_source,
+        last_value(post_url) over ({{partition_def}}) as post_url,
+        last_value(post_text) over ({{partition_def}}) as post_text,
+        last_value(post_author) over ({{partition_def}}) as post_author,
+        last_value(post_author_location) over ({{partition_def}}) as post_author_location,
+        last_value(post_author_description) over ({{partition_def}}) as post_author_description,
+        last_value(post_metrics) over ({{partition_def}}) as post_metrics,
+        last_value(post_author_metrics) over ({{partition_def}}) as post_author_metrics,
+        last_value(post_creation_ts) over ({{partition_def}}) as post_creation_ts,
+        last_value(post_author_creation_ts) over ({{partition_def}}) as post_author_creation_ts,
+        last_value(article_publication_partition_ts) over ({{partition_def}}) as article_publication_partition_ts,
+        last_value(record_loading_ts) over ({{partition_def}}) as record_loading_ts
+    
+    from base  
+    
+)
+
+select * from final
+order by post_creation_ts
+
+================
+File: climate_resilience/assets/analytics/models/staging/social_networks/stg__x_conversations.sql
+================
+{% set partition_def = 'partition by post_natural_key, social_network_source order by record_loading_ts RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING' %}
+
+with source as (
+
+    select * from {{ source('social_networks', 'x_conversations') }}
+
+),
+
+base as (
+
+    select distinct
+        cast(tweet_id as string) as post_natural_key,
+        'x' as social_network_source,
+        
+        cast(tweet_conversation_id as string) as conversation_natural_key,
+        cast(author_id as string) as post_author_natural_key,
+
+        cast(article_url as string) as article_url,
+        'nytimes' as media_source,
+        'https://twitter.com/' || cast(author_username as string) || '/status/' || cast(tweet_id as string) as post_url,
+        cast(tweet_text as string) as post_text,
+        cast(author_username as string) as post_author,
+        cast(author_location as string) as post_author_location,
+        cast(author_description as string) as post_author_description,
+        cast(tweet_public_metrics as string) as post_metrics,
+        cast(author_public_metrics as string) as post_author_metrics,
+
+        cast(tweet_created_at as timestamp) as post_creation_ts,
+        cast(author_created_at as timestamp) as post_author_creation_ts,
+        cast(partition_hour_utc_ts as timestamp) as article_publication_partition_ts,
+        cast(record_loading_ts as timestamp) as record_loading_ts
+    
+    from source
+
+),
+
+final as (
+    
+    select distinct
+        post_natural_key,
+        social_network_source,
+        last_value(conversation_natural_key) over ({{partition_def}}) as conversation_natural_key,
+        last_value(post_author_natural_key) over ({{partition_def}}) as post_author_natural_key,
+        last_value(article_url) over ({{partition_def}}) as article_url,
+        last_value(media_source) over ({{partition_def}}) as media_source,
+        last_value(post_url) over ({{partition_def}}) as post_url,
+        last_value(post_text) over ({{partition_def}}) as post_text,
+        last_value(post_author) over ({{partition_def}}) as post_author,
+        last_value(post_author_description) over ({{partition_def}}) as post_author_description,
+        last_value(post_author_location) over ({{partition_def}}) as post_author_location,
+        last_value(post_metrics) over ({{partition_def}}) as post_metrics,
+        last_value(post_author_metrics) over ({{partition_def}}) as post_author_metrics,
+        last_value(post_creation_ts) over ({{partition_def}}) as post_creation_ts,
+        last_value(post_author_creation_ts) over ({{partition_def}}) as post_author_creation_ts,
+        last_value(article_publication_partition_ts) over ({{partition_def}}) as article_publication_partition_ts,
+        last_value(record_loading_ts) over ({{partition_def}}) as record_loading_ts
+    
+    from base  
+    
+)
+
+select * from final
+order by post_creation_ts
+
+================
+File: climate_resilience/assets/analytics/models/staging/sources.yml
+================
+version: 2
+
+sources:
+  - name: media
+    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+    schema: "{{ env_var('BIGQUERY_MEDIA_DATASET') }}"
+    tables:
+      - name: nytimes_articles
+        meta:
+          dagster:
+            asset_key: ["media", "nytimes_articles"]
+
+  - name: social_networks
+    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+    schema: "{{ env_var('BIGQUERY_SOCIAL_NETWORKS_DATASET') }}"
+    tables:
+      - name: x_conversations
+        meta:
+          dagster:
+            asset_key: ["social_networks", "x_conversations"]
+      - name: x_conversation_posts
+        meta:
+          dagster:
+            asset_key: ["social_networks", "x_conversation_posts"]
+      - name: user_geolocations
+        meta:
+          dagster:
+            asset_key: ["social_networks", "user_geolocations"]
+
+  - name: narratives
+    database: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+    schema: "{{ env_var('BIGQUERY_NARRATIVES_DATASET') }}"
+    tables:
+      - name: conversation_classifications
+        meta:
+          dagster:
+            asset_key: ["narratives", "conversation_classifications"]
+      - name: conversation_event_summaries
+        identifier: conversation_event_summary
+        meta:
+          dagster:
+            asset_key: ["narratives", "conversation_event_summary"]
+      - name: post_narrative_associations
+        meta:
+          dagster:
+            asset_key: ["narratives", "post_narrative_associations"]
+
+================
+File: climate_resilience/assets/analytics/models/warehouse/media_articles_fct.sql
+================
+with s_media_articles as (
+
+    select * from {{ ref('int__media_articles') }}
+
+), 
+
+final as (
+
+    select distinct
+        {{ dbt_utils.generate_surrogate_key([
+            'media_source',
+            'article_url',
+        ]) }} as media_article_pk, 
+
+        article_url,
+        media_source,
+
+        article_title,
+        article_summary,
+        article_tags,
+        article_author,
+        article_medias,
+
+        article_publication_ts,
+        article_modification_ts
+    
+    from s_media_articles
+
+)
+
+select * from final
+order by article_publication_ts
+
+================
+File: climate_resilience/assets/analytics/models/warehouse/social_network_conversations_dim.sql
+================
+with s_social_network_conversations as (
+
+    select * from {{ ref('int__social_network_conversations') }}
+
+), 
+
+final as (
+
+    select distinct
+        {{ dbt_utils.generate_surrogate_key([
+            'social_network_source',
+            'conversation_natural_key',
+        ]) }} as social_network_conversation_pk,
+
+        {{ dbt_utils.generate_surrogate_key([
+            'media_source',
+            'article_url',
+        ]) }} as media_article_fk,
+
+        social_network_source,
+        conversation_natural_key,
+        is_climate_conversation,
+        event_summary,
+        earliest_post_creation_ts,
+    
+    from s_social_network_conversations
+
+)
+
+select * from final
+order by earliest_post_creation_ts
+
+================
+File: climate_resilience/assets/analytics/models/warehouse/social_network_posts_fct.sql
+================
+with s_social_network_posts as (
+
+    select * from {{ ref('int__social_network_posts') }}
+
+), 
+
+final as (
+
+    select distinct
+        {{ dbt_utils.generate_surrogate_key([
+            'social_network_source',
+            'post_natural_key',
+        ]) }} as social_network_post_pk,
+
+        {{ dbt_utils.generate_surrogate_key([
+            'social_network_source',
+            'conversation_natural_key',
+        ]) }} as social_network_conversation_fk,
+
+        {{ dbt_utils.generate_surrogate_key([
+            'social_network_source',
+            'post_author_natural_key',
+        ]) }} as social_network_user_profile_fk,
+
+        conversation_natural_key,
+        social_network_source,
+        post_natural_key,
+
+        post_url,
+        post_text,
+        post_type,
+        discourse_category,
+        discourse_sub_category,
+        narrative,
+        justification,
+
+        post_creation_ts
+    
+    from s_social_network_posts
+
+)
+
+select * from final
+order by post_creation_ts
+
+================
+File: climate_resilience/assets/analytics/models/warehouse/social_network_user_profiles_dim.sql
+================
+with s_social_network_user_profiles as (
+
+    select * from {{ ref('int__social_network_user_profiles') }}
+
+), 
+
+final as (
+
+    select distinct
+        {{ dbt_utils.generate_surrogate_key([
+            'social_network_source',
+            'social_network_profile_natural_key',
+        ]) }} as social_network_user_profile_pk,
+
+        social_network_source,
+        social_network_profile_natural_key,
+        
+        social_network_profile_username,
+        social_network_profile_description,
+        social_network_profile_location_name,
+        social_network_profile_location_country_name,
+        social_network_profile_location_country_code,
+        social_network_profile_location_admin1_name,
+        social_network_profile_location_admin1_code,
+        social_network_profile_location_latitude,
+        social_network_profile_location_longitude,
+        social_network_profile_location_h3_r3,
+
+        social_network_profile_creation_ts
+    
+    from s_social_network_user_profiles
+
+)
+
+select * from final
+
+================
+File: climate_resilience/assets/analytics/__init__.py
+================
+from pathlib import Path
+from typing import Any, Mapping, Optional
+
+from dagster_dbt import DagsterDbtTranslator, DbtCliResource, dbt_assets
+
+
+# Custom dbt translator to dynamically set asset properties
+class CustomDagsterDbtTranslator(DagsterDbtTranslator):
+    def get_asset_key(self, dbt_resource_props: Mapping[str, Any]):
+        asset_key = super().get_asset_key(dbt_resource_props)
+
+        # Check if the resource type is not a source
+        if dbt_resource_props["resource_type"] != "source":
+            asset_key = asset_key.with_prefix("analytics")
+
+        return asset_key
+
+    def get_group_name(self, dbt_resource_props: Mapping[str, Any]) -> Optional[str]:
+        return "analytics"
+
+
+# Build assets for each account connector view
+@dbt_assets(
+    dagster_dbt_translator=CustomDagsterDbtTranslator(),
+    manifest=Path("climate_resilience/assets/analytics/target", "manifest.json"),
+)
+def analytics_assets(context, dbt_resource: DbtCliResource):
+    dbt_build_args = ["build"]
+
+    yield from dbt_resource.cli(dbt_build_args, context=context).stream()
+
+================
+File: climate_resilience/assets/analytics/dbt_project.yml
+================
+name: "climate_resilience_analytics"
+version: "0.1.0"
+require-dbt-version: ">=1.8.6"
+config-version: 2
+
+profile: climate_resilience_analytics
+
+models:
+  climate_resilience_analytics:
+    +materialized: table
+
+================
+File: climate_resilience/assets/analytics/packages.yml
+================
+packages:
+  - package: dbt-labs/dbt_utils
+    version: ">=1.3.0"
+
+================
+File: climate_resilience/assets/analytics/profiles.yml
+================
+climate_resilience_analytics:
+  target: analytics
+  outputs:
+    analytics:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('BIGQUERY_PROJECT_ID') }}"
+      dataset: "{{ env_var('BIGQUERY_ANALYTICS_DATASET') }}"
+      threads: 1
+
+================
+File: climate_resilience/assets/media/__init__.py
+================
+from dagster import load_assets_from_modules
+
+from . import media
+
+# Load assets from package modules
+media_assets = load_assets_from_modules(
+    modules=[media],
+    key_prefix="media",
+    group_name="media",
+)
+
+================
+File: climate_resilience/assets/media/media.py
+================
+import os
+from datetime import datetime
+from typing import Optional, TypedDict
+
+import feedparser
+import pandas as pd
+from dagster import AssetExecutionContext, AssetsDefinition, Output, asset
+
+from ...partitions import hourly_partition_def
+from ...resources import SupabaseResource
+
+
+class MediaArticle(TypedDict):
+    media: str
+    id: str
+    title: str
+    link: str
+    summary: Optional[str]
+    author: str
+    tags: str
+    medias: str
+    published_ts: datetime
+
+
+# Get media feeds
+supabase_resource = SupabaseResource(
+    url=os.environ["SUPABASE_URL"], key=os.environ["SUPABASE_KEY"]
+)
+media_feeds = supabase_resource.get_media_feeds()
+
+
+# Factory to create media feed assets
+def build_media_feed_assets(
+    name: str, slug: str, rss_feed: str, categories: str
+) -> AssetsDefinition:
+    @asset(
+        name=f"{slug}_articles",
+        description=f"Media feed for {name}",
+        io_manager_key="media_io_manager",
+        partitions_def=hourly_partition_def,
+        metadata={"partition_expr": "published_ts"},
+        output_required=False,
+        compute_kind="python",
+    )
+    def _asset(context: AssetExecutionContext):
+        # Get partition's time
+        partition_time_str = context.asset_partition_key_for_output()
+        partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+        # Parse the RSS feed
+        feed = feedparser.parse(rss_feed)
+
+        # Extract articles and convert them into a DataFrame
+        articles = []
+
+        for entry in feed.entries:
+            if categories != "None":
+                # Check if the article has at least one matching category
+                entry_tags = getattr(entry, "tags", [])
+                if not any(
+                    category.strip().lower()
+                    in (tag.term.strip().lower() for tag in entry_tags)
+                    for category in categories.split(",")
+                ):
+                    continue  # Skip this article if no matching categories are found
+
+            # If categories is None or the article matches the categories, include it
+            articles.append(
+                MediaArticle(
+                    media=slug,
+                    id=entry.id,
+                    title=entry.title,
+                    link=entry.link,
+                    summary=entry.summary,
+                    author=entry.author if "author" in entry else None,
+                    tags=",".join(
+                        [tag.term for tag in entry.tags] if "tags" in entry else []
+                    ),
+                    medias=",".join(
+                        [media["url"] for media in entry.media_content]
+                        if "media_content" in entry
+                        else []
+                    ),
+                    published_ts=entry.published,
+                )
+            )
+
+        if articles:
+            # Enforce data types
+            articles_df = pd.DataFrame(articles)
+            articles_df["published_ts"] = pd.to_datetime(
+                articles_df["published_ts"], format="%a, %d %b %Y %H:%M:%S %z"
+            ).dt.tz_localize(None)
+
+            # Keep articles that are within the partition's time
+            articles_df = articles_df[
+                (articles_df["published_ts"] >= partition_time)
+                & (articles_df["published_ts"] < partition_time + pd.Timedelta(hours=1))
+            ]
+
+            # Return asset
+            yield Output(
+                value=articles_df,
+                metadata={
+                    "num_rows": articles_df.shape[0],
+                },
+            )
+
+    return _asset
+
+
+media_feed_assets = []
+for _, media_feed in media_feeds.iterrows():
+    media_feed_asset = build_media_feed_assets(
+        name=str(media_feed["name"]),
+        slug=str(media_feed["slug"]),
+        rss_feed=str(media_feed["rss_feed"]),
+        categories=str(media_feed["categories"]),
+    )
+    media_feed_assets.append(media_feed_asset)
+
+================
+File: climate_resilience/assets/narratives/__init__.py
+================
+from dagster import load_assets_from_modules
+
+from . import event_summary, narratives
+
+# Load assets from package modules
+narratives_assets = load_assets_from_modules(
+    modules=[narratives, event_summary],
+    key_prefix="narratives",
+    group_name="narratives",
+)
+
+================
+File: climate_resilience/assets/narratives/event_summary.py
+================
+from datetime import datetime
+
+import pandas as pd
+from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
+from typing_extensions import Optional, TypedDict
+
+from ...agents import conversation_event_summary_agent
+from ...partitions import three_hour_partition_def
+
+
+class Conversation(TypedDict):
+    id: str
+    conversation: str
+
+
+class Article(TypedDict):
+    url: Optional[str]
+    title: Optional[str]
+    summary: Optional[str]
+
+
+class EventSummary(TypedDict):
+    conversation_id: str
+    event_summary: str
+    research_cycles: int
+    partition_time: datetime
+
+
+@asset(
+    name="conversation_event_summary",
+    description="Summary of the event discussed in a conversation",
+    io_manager_key="narratives_io_manager",
+    ins={
+        "articles": AssetIn(
+            key=["media", "nytimes_articles"],
+            partition_mapping=TimeWindowPartitionMapping(
+                start_offset=-12, end_offset=-4
+            ),
+        ),
+        "x_conversations": AssetIn(
+            key=["social_networks", "x_conversations"],
+            partition_mapping=TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=-4
+            ),
+        ),
+        "x_conversation_posts": AssetIn(
+            key=["social_networks", "x_conversation_posts"],
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-4, end_offset=0),
+        ),
+    },
+    partitions_def=three_hour_partition_def,
+    metadata={"partition_expr": "partition_time"},
+    output_required=False,
+    compute_kind="LangChain",
+)
+def conversation_event_summary(
+    context,
+    articles,
+    x_conversations,
+    x_conversation_posts,
+):
+    # Log upstream asset's partition keys
+    context.log.info(
+        f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
+    )
+    context.log.info(
+        f"Partition key range for x_conversation_posts: {context.asset_partition_key_range_for_input('x_conversation_posts')}"
+    )
+
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    context.log.info(f"Number of conversations: {len(x_conversations)}")
+    event_summaries = []
+
+    if not x_conversations.empty:
+        for _, conversation in x_conversations.iterrows():
+            # Conversation's tweet text
+            conversation_list = [conversation["tweet_text"]]
+
+            for _, post in x_conversation_posts.iterrows():
+                if (
+                    post["tweet_conversation_id"]
+                    == conversation["tweet_conversation_id"]
+                ):
+                    conversation_list.append(post["tweet_text"])
+
+            context.log.info(
+                f"Number of posts for conversation {conversation['tweet_conversation_id']}: {len(conversation_list)}"
+            )
+
+            # Append article's title and summary to the conversation
+            article_url = None
+            article_title = None
+            article_summary = None
+
+            for _, article in articles.iterrows():
+                if article["link"] == conversation["article_url"]:
+                    article_url = article["link"]
+                    article_title = article["title"]
+                    article_summary = article["summary"]
+                    break
+
+            if len(conversation_list) >= 2:
+                context.log.info(
+                    f"Launching Investigative Reporter AI Agent for conversation {conversation['tweet_conversation_id']}"
+                )
+
+                # Package conversation into a markdown string
+                conversation_markdown = f"# {conversation['tweet_conversation_id']}\n\n"
+                conversation_markdown += "\n".join(
+                    [f"- {tweet}" for tweet in conversation_list]
+                )
+                context.log.info(f"Conversation: {conversation_markdown}")
+
+                conversation = Conversation(
+                    id=conversation["tweet_conversation_id"],
+                    conversation=conversation_markdown,
+                )
+
+                article = Article(
+                    url=article_url,
+                    title=article_title,
+                    summary=article_summary,
+                )
+
+                conversation_event_summary_output = (
+                    conversation_event_summary_agent.invoke(
+                        {
+                            "conversation": conversation,
+                            "article": article,
+                            "completeness_assessment": False,
+                            "research_cycles": 0,
+                        }
+                    )
+                )
+                event_summary = EventSummary(
+                    conversation_id=conversation["id"],
+                    event_summary=conversation_event_summary_output["event_summary"],
+                    research_cycles=conversation_event_summary_output[
+                        "research_cycles"
+                    ],
+                    partition_time=partition_time,
+                )
+
+                event_summaries.append(event_summary)
+            else:
+                event_summary = EventSummary(
+                    conversation_id=conversation["tweet_conversation_id"],
+                    event_summary=article_summary,
+                    research_cycles=0,
+                    partition_time=partition_time,
+                )
+                event_summaries.append(event_summary)
+
+    if event_summaries:
+        yield Output(
+            value=pd.DataFrame(event_summaries),
+            metadata={
+                "num_rows": str(len(event_summaries)),
+            },
+        )
+
+================
+File: climate_resilience/assets/narratives/narratives.py
+================
+import json
+import os
+from datetime import datetime
+
+import dagster as dg
+import pandas as pd
+from dagster_gcp import BigQueryResource
+from google.api_core.exceptions import GoogleAPIError
+from pydantic import BaseModel, Field
+
+from ...agents import conversation_classification_agent, post_association_agent
+from ...partitions import three_hour_partition_def
+from ...utils.conversations import assemble_conversations
+
+
+class PostAssociation(BaseModel):
+    """Association between post and discourse"""
+
+    post_id: str = Field(description="A post's id")
+    post_type: str = Field(description="Classification of the type of post")
+    discourse_category: str = Field(
+        description="The associated discourse category's label."
+    )
+    discourse_sub_category: str = Field(
+        description="The associated discourse sub-category's label."
+    )
+    narrative: str = Field(
+        description="A concise summary of the post's underlying perspective or storyline."
+    )
+    justification: str = Field(
+        description="A detailed explanation of how the discourse category, sub-category, and narrative were determined, referencing key textual elements or rhetorical cues in the post."
+    )
+    confidence: float = Field(
+        description="A confidence score (0-1) indicating the certainty of the discourse and narrative classification."
+    )
+    partition_time: datetime = Field(
+        description="The time at which the post was classified."
+    )
+
+
+class ConversationClassification(BaseModel):
+    """Classify if a conversation is about climate change"""
+
+    conversation_id: str = Field(description="A conversation's id")
+    classification: bool = Field(
+        description="Whether the conversation is about climate change"
+    )
+    partition_time: datetime = Field(
+        description="The time at which the conversation was classified."
+    )
+
+
+@dg.asset(
+    name="conversation_classifications",
+    description="Classification of conversations as climate-related or not",
+    io_manager_key="narratives_io_manager",
+    ins={
+        "x_conversations": dg.AssetIn(
+            key=["social_networks", "x_conversations"],
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=-4
+            ),
+        ),
+        "x_conversation_posts": dg.AssetIn(
+            key=["social_networks", "x_conversation_posts"],
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=0
+            ),
+        ),
+    },
+    partitions_def=three_hour_partition_def,
+    metadata={"partition_expr": "partition_time"},
+    output_required=False,
+    compute_kind="LangChain",
+)
+def conversation_classifications(
+    context,
+    x_conversations,
+    x_conversation_posts,
+):
+    # Log upstream asset's partition keys
+    context.log.info(
+        f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
+    )
+    context.log.info(
+        f"Partition key range for x_conversation_posts: {context.asset_partition_key_range_for_input('x_conversation_posts')}"
+    )
+
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    # Initialize DataFrame to store classifications
+    conversation_classifications = []
+
+    if not x_conversations.empty:
+        # Assemble full conversations
+        conversations_df = assemble_conversations(
+            context, conversations=x_conversations, posts=x_conversation_posts
+        )
+
+        # Group by tweet_conversation_id and aggregate tweet_texts into a list ordered by tweet_created_at
+        conversations_df = (
+            conversations_df.groupby("post_conversation_id")
+            .apply(
+                lambda x: x.sort_values("post_created_at")[
+                    ["post_id", "post_created_at", "post_text"]
+                ].to_dict(orient="records")
+            )
+            .reset_index(name="posts")
+        )
+
+        context.log.info(
+            f"Classifying {len(conversations_df)} social network conversation posts."
+        )
+
+        # Iterate over all conversations and classify them
+        for _, conversation_df in conversations_df.iterrows():
+            conversation_dict = conversation_df.to_dict()
+            conversation_json = json.dumps(conversation_dict, default=str)
+            context.log.info(f"Classifying conversation: {conversation_json}")
+
+            conversation_classifications_output = (
+                conversation_classification_agent.invoke(
+                    {"conversation_posts_json": conversation_json}
+                )
+            )
+
+            conversation_classifications.append(
+                ConversationClassification(
+                    conversation_id=conversation_dict["post_conversation_id"],
+                    classification=str(
+                        conversation_classifications_output.dict()["classification"]
+                    ),
+                    partition_time=partition_time,
+                )
+            )
+
+    if conversation_classifications:
+        # Convert list of PostAssociation objects to list of dicts
+        conversation_classifications_dicts = [
+            assoc.dict() for assoc in conversation_classifications
+        ]
+
+        # Convert to DataFrame
+        conversation_classifications_df = pd.DataFrame(
+            conversation_classifications_dicts
+        )
+        conversation_classifications_df["classification"] = (
+            conversation_classifications_df["classification"].astype(str)
+        )
+
+        # Ensure column names are strings
+        conversation_classifications_df.columns = (
+            conversation_classifications_df.columns.map(str)
+        )
+
+        context.log.info(
+            f"Final DataFrame before yielding: {conversation_classifications_df}"
+        )
+
+        # Return asset
+        yield dg.Output(
+            value=conversation_classifications_df,
+            metadata={
+                "num_rows": conversation_classifications_df.shape[0],
+            },
+        )
+
+
+@dg.asset(
+    name="post_narrative_associations",
+    description="Associations between social network posts and narrative types",
+    io_manager_key="narratives_io_manager",
+    ins={
+        "x_conversations": dg.AssetIn(
+            key=["social_networks", "x_conversations"],
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=-4
+            ),
+        ),
+        "x_conversation_posts": dg.AssetIn(
+            key=["social_networks", "x_conversation_posts"],
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-4, end_offset=0
+            ),
+        ),
+        "conversation_classifications": dg.AssetIn(
+            key=["narratives", "conversation_classifications"],
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=0, end_offset=0
+            ),
+        ),
+        "conversation_event_summary": dg.AssetIn(
+            key=["narratives", "conversation_event_summary"],
+        ),
+        "articles": dg.AssetIn(
+            key=["media", "nytimes_articles"],
+            partition_mapping=dg.TimeWindowPartitionMapping(
+                start_offset=-12, end_offset=0
+            ),
+        ),
+    },
+    partitions_def=three_hour_partition_def,
+    metadata={"partition_expr": "partition_time"},
+    output_required=False,
+    compute_kind="LangChain",
+)
+def post_narrative_associations(
+    context,
+    x_conversations,
+    x_conversation_posts,
+    conversation_classifications,
+    conversation_event_summary,
+    articles,
+    gcp_resource: BigQueryResource,
+):
+    # Log upstream asset's partition keys
+    context.log.info(
+        f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
+    )
+    context.log.info(
+        f"Partition key range for x_conversation_posts: {context.asset_partition_key_range_for_input('x_conversation_posts')}"
+    )
+    context.log.info(
+        f"Partition key range for conversation_classifications: {context.asset_partition_key_range_for_input('conversation_classifications')}"
+    )
+    context.log.info(
+        f"Partition key range for conversation_event_summary: {context.asset_partition_key_range_for_input('conversation_event_summary')}"
+    )
+    context.log.info(
+        f"Partition key range for articles: {context.asset_partition_key_range_for_input('articles')}"
+    )
+
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    # Initialize DataFrame to store classifications
+    post_associations = []
+
+    if not x_conversations.empty:
+        # Fetch all event summaries from the conversations in x_conversations
+        sql = f"""
+        select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_NARRATIVES_DATASET")}.conversation_event_summary
+        where conversation_id in ({','.join(map(lambda x: f"'{x}'", x_conversations["tweet_conversation_id"].to_list()))})
+        """
+
+        with gcp_resource.get_client() as client:
+            job = client.query(sql)
+            job.result()  # Wait for the job to complete
+
+            if job.error_result:
+                error_message = job.error_result.get("message", "Unknown error")
+                raise GoogleAPIError(f"BigQuery job failed: {error_message}")
+            else:
+                event_summary_df = job.to_dataframe()
+
+        context.log.info(
+            f"Number of event summaries fetched: {event_summary_df.shape[0]}"
+        )
+
+        # Assemble full conversations
+        conversations_df = assemble_conversations(
+            context,
+            conversations=x_conversations,
+            posts=x_conversation_posts,
+            classifications=conversation_classifications,
+            event_summaries=event_summary_df,
+            articles=articles,
+        )
+        context.log.info(
+            f"Associating discourse type and extracting narrative for {len(conversations_df)} social network conversation posts."
+        )
+
+        # Iterate over all conversations and classify them
+        for _, conversation_post in conversations_df.iterrows():
+            try:
+                post_association_output = post_association_agent.invoke(
+                    {
+                        "post_id": conversation_post["post_id"],
+                        "event_summary": conversation_post["event_summary"],
+                        "initial_post_text": conversation_post["initial_post_text"],
+                        "post_text": conversation_post["post_text"],
+                    }
+                )
+                associations_list = list(post_association_output.post_associations)
+
+                for association in associations_list:
+                    context.log.info(f"Processing association: {association}")
+
+                    post_associations.append(
+                        PostAssociation(
+                            post_id=association.post_id,
+                            post_type=association.post_type,
+                            discourse_category=association.discourse_category,  # <-- Check if `category` exists
+                            discourse_sub_category=association.discourse_sub_category,  # <-- Check if `sub_category` exists
+                            narrative=association.narrative,
+                            justification=association.justification,
+                            confidence=association.confidence,
+                            partition_time=partition_time,
+                        )
+                    )
+
+            except Exception as e:
+                context.log.error(f"Failed to associate posts")
+                context.log.error(e)
+
+    if post_associations:
+        # Convert list of PostAssociation objects to list of dicts
+        post_associations_dicts = [assoc.dict() for assoc in post_associations]
+
+        # Convert to DataFrame
+        post_associations_df = pd.DataFrame(post_associations_dicts)
+
+        # Ensure column names are strings
+        post_associations_df.columns = post_associations_df.columns.map(str)
+
+        context.log.info(f"Final DataFrame before yielding: {post_associations_df}")
+
+        # Return asset
+        yield dg.Output(
+            value=post_associations_df,
+            metadata={
+                "num_rows": post_associations_df.shape[0],
+            },
+        )
+
+================
+File: climate_resilience/assets/social_networks/__init__.py
+================
+from dagster import load_assets_from_modules
+
+from . import geolocation, x
+
+# Load assets from package modules
+social_networks_assets = load_assets_from_modules(
+    modules=[x, geolocation],
+    key_prefix="social_networks",
+    group_name="social_networks",
+)
+
+================
+File: climate_resilience/assets/social_networks/geolocation.py
+================
+import os
+from datetime import datetime
+from typing import List, TypedDict
+
+import pandas as pd
+import requests
+import spacy
+from dagster import AssetIn, Output, TimeWindowPartitionMapping, asset
+from dagster_gcp import BigQueryResource
+
+from ...partitions import three_hour_partition_def
+from ...resources.proxycurl_resource import ProxycurlResource
+
+spacy.cli.download("en_core_web_sm")
+nlp = spacy.load("en_core_web_sm")
+
+
+class SocialNetworkUserProfileGeolocation(TypedDict):
+    social_network_profile_id: str
+    social_network_profile_username: str
+    location_order: int
+    location: str
+    countryName: str
+    countryCode: str
+    adminName1: str
+    adminCode1: str
+    latitude: str
+    longitude: str
+    geolocation_ts: datetime
+    partition_hour_utc_ts: datetime
+
+
+# Geocode locations using GeoNames
+def geocode(location):
+    spacy_username = os.getenv("SPACY_USERNAME")
+    url = f"http://api.geonames.org/searchJSON?q={location}&maxRows=1&username={spacy_username}"
+    response = requests.get(url)
+    if response.ok and response.json()["geonames"]:
+        return response.json()["geonames"][0]
+    return {}
+
+
+def extract_locations_with_spacy(text: str, nlp) -> List[str]:
+    """Extract geographical entities from text using spaCy."""
+    doc = nlp(text)
+    return [ent.text for ent in doc.ents if ent.label_ == "GPE"]
+
+
+def add_placeholder_geolocation(row, partition_time):
+    """Create a placeholder geolocation entry for a user."""
+    return SocialNetworkUserProfileGeolocation(
+        social_network_profile_id=row["author_id"],
+        social_network_profile_username=row["author_username"],
+        location_order=None,
+        location=None,
+        countryName="",
+        countryCode="",
+        adminName1="",
+        adminCode1="",
+        latitude=None,
+        longitude=None,
+        geolocation_ts=datetime.now(),
+        partition_hour_utc_ts=partition_time,
+    )
+
+
+def process_locations(
+    context, locations: List[str], row: pd.Series, partition_time: datetime
+) -> List[SocialNetworkUserProfileGeolocation]:
+    """Process locations and generate geolocation entries."""
+    geolocations = []
+    for location_order, location in enumerate(locations):
+        context.log.info(f"Geocoding {location}")
+        geocoded_location_data = geocode(location)
+        if not geocoded_location_data:
+            continue  # Skip if geocode fails
+        geolocations.append(
+            SocialNetworkUserProfileGeolocation(
+                social_network_profile_id=row["author_id"],
+                social_network_profile_username=row["author_username"],
+                location_order=location_order,
+                location=location,
+                countryName=geocoded_location_data.get("countryName", ""),
+                countryCode=geocoded_location_data.get("countryCode", ""),
+                adminName1=geocoded_location_data.get("adminName1", ""),
+                adminCode1=geocoded_location_data.get("adminCode1", ""),
+                latitude=geocoded_location_data.get("lat", ""),
+                longitude=geocoded_location_data.get("lng", ""),
+                geolocation_ts=datetime.now(),
+                partition_hour_utc_ts=partition_time,
+            )
+        )
+
+    context.log.info(f"Geocoded {len(geolocations)} locations.")
+
+    return geolocations
+
+
+# Check if the geocoded location is at least at the state level
+def is_state_level(geocoded_data: dict) -> bool:
+    """Check if the geocoded location is at the state level."""
+    return bool(geocoded_data.get("adminName1")) and bool(
+        geocoded_data.get("countryName")
+    )
+
+
+# Calculate the number of decimal places in a coordinate.
+def calculate_precision(coord):
+    if pd.isna(coord) or coord == "":
+        return 0
+    # Split the coordinate on the decimal point and return the length of the fractional part
+    return len(coord.split(".")[1]) if "." in coord else 0
+
+
+# Calculate the precision for latitude and longitude
+def most_precise_location(group):
+    group["latitude_precision"] = group["latitude"].apply(calculate_precision)
+    group["longitude_precision"] = group["longitude"].apply(calculate_precision)
+
+    # Sum the precision of latitude and longitude to get a total precision score
+    group["total_precision"] = (
+        group["latitude_precision"] + group["longitude_precision"]
+    )
+
+    # Sort the group by total precision in descending order and return the first row
+    most_precise = group.sort_values("total_precision", ascending=False).iloc[0]
+
+    # Drop the temporary precision columns before returning
+    return most_precise.drop(
+        ["latitude_precision", "longitude_precision", "total_precision"]
+    )
+
+
+@asset(
+    name="user_geolocations",
+    description="Geolocation of social network user's profile location",
+    io_manager_key="social_networks_io_manager",
+    ins={
+        "x_conversations": AssetIn(
+            key=["social_networks", "x_conversations"],
+        ),
+        "x_conversation_posts": AssetIn(
+            key=["social_networks", "x_conversation_posts"],
+            partition_mapping=TimeWindowPartitionMapping(start_offset=0, end_offset=1),
+        ),
+    },
+    partitions_def=three_hour_partition_def,
+    metadata={"partition_expr": "partition_hour_utc_ts"},
+    output_required=False,
+    compute_kind="python",
+)
+def user_geolocations(
+    context,
+    x_conversations,
+    x_conversation_posts,
+    gcp_resource: BigQueryResource,
+    proxycurl_resource: ProxycurlResource,
+):
+    # Log upstream asset's partition keys
+    context.log.info(
+        f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
+    )
+    context.log.info(
+        f"Partition key range for x_conversation_posts: {context.asset_partition_key_range_for_input('x_conversation_posts')}"
+    )
+
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    # Initialize DataFrame that will hold geolocation data of social network user's profile location
+    social_network_user_geolocations = []
+
+    # Combine and deduplicate posts
+    social_network_posts = pd.concat(
+        [x_conversations, x_conversation_posts], ignore_index=True
+    ).drop_duplicates(subset=["author_id"], keep="first")
+    context.log.info(f"Geolocating {len(social_network_posts)} social network users.")
+
+    # If we have social network posts to geolocate
+    if not social_network_posts.empty:
+        # Get existing geolocations for list of users
+        sql = f"""
+        select * from {os.getenv("BIGQUERY_PROJECT_ID")}.{os.getenv("BIGQUERY_SOCIAL_NETWORKS_DATASET")}.user_geolocations
+        where social_network_profile_id in ({','.join(map(lambda x: f"'{x}'", social_network_posts["author_id"].to_list()))})
+        and geolocation_ts >= DATETIME_SUB(CURRENT_DATETIME(), INTERVAL 30 DAY)
+        """
+
+        with gcp_resource.get_client() as client:
+            job = client.query(sql)
+            job.result()  # Wait for the job to complete
+
+            if job.error_result:
+                error_message = job.error_result.get("message", "Unknown error")
+                raise GoogleAPIError(f"BigQuery job failed: {error_message}")
+            else:
+                existing_user_geolocations_df = job.to_dataframe()
+
+        # Filter out users that have already been geolocated in the past 30 days
+        social_network_posts = social_network_posts[
+            ~social_network_posts["author_id"].isin(
+                existing_user_geolocations_df["SOCIAL_NETWORK_PROFILE_ID"]
+            )
+        ]
+        context.log.info(
+            f"Performing new geolocations for {len(social_network_posts)} social network users."
+        )
+
+        for _, row in social_network_posts.iterrows():
+            context.log.info(f"Processing {row['author_username']}")
+            try:
+                # Extract geographical entities from the user's profile
+                locations = extract_locations_with_spacy(
+                    row.get("author_location", ""), nlp
+                )
+                context.log.info(
+                    f"Locations found from their user profile: {locations}"
+                )
+
+                # If locations found via NLP, process them
+                if locations:
+                    precise_geolocations = []
+                    for location in locations:
+                        geocoded_location_data = geocode(location)
+
+                        # Check if the location is precise (state level)
+                        if is_state_level(geocoded_location_data):
+                            precise_geolocations.append(location)
+
+                    # Check if we have precise geolocations, else we'll fall back to proxycurl
+                    if precise_geolocations:
+                        geo_locations = process_locations(
+                            context, precise_geolocations, row, partition_time
+                        )
+                        if geo_locations:
+                            social_network_user_geolocations.extend(geo_locations)
+                            continue
+
+                # Otherwise, fallback to ProxyCurl
+                context.log.info("Falling back to ProxyCurl for geolocation.")
+                proxycurl_response_df = proxycurl_resource.get_person_profile(
+                    f"https://x.com/{row['author_username']}/"
+                )
+
+                if proxycurl_response_df.empty:
+                    context.log.info("Proxycurl returned an empty DataFrame.")
+                    social_network_user_geolocations.append(
+                        add_placeholder_geolocation(row, partition_time)
+                    )
+                    continue
+
+                # Process ProxyCurl data
+                city = proxycurl_response_df.iloc[0].get("city") or ""
+                state = proxycurl_response_df.iloc[0].get("state") or ""
+                country = proxycurl_response_df.iloc[0].get("country_full_name") or ""
+
+                proxycurl_locations = []
+
+                if city.strip():
+                    proxycurl_locations.append(city.strip())
+                if state.strip():
+                    proxycurl_locations.append(state.strip())
+                if country.strip():
+                    proxycurl_locations.append(country.strip())
+
+                if proxycurl_locations:
+                    context.log.info(
+                        f"Locations found from ProxyCurl: {proxycurl_locations}"
+                    )
+                    geolocations = process_locations(
+                        context, proxycurl_locations, row, partition_time
+                    )
+                    if geolocations:
+                        social_network_user_geolocations.extend(geolocations)
+                        continue
+                    else:
+                        context.log.info("No locations found from ProxyCurl.")
+                        social_network_user_geolocations.append(
+                            add_placeholder_geolocation(row, partition_time)
+                        )
+                        continue
+                else:
+                    context.log.info("No locations found from ProxyCurl.")
+                    social_network_user_geolocations.append(
+                        add_placeholder_geolocation(row, partition_time)
+                    )
+
+            except Exception as e:
+                context.log.error(f"Error processing {row['author_username']}: {e}")
+                social_network_user_geolocations.append(
+                    add_placeholder_geolocation(row, partition_time)
+                )
+
+    # Deduplicate geolocation info and return asset
+    if social_network_user_geolocations:
+        social_network_user_profile_geolocations_df = pd.DataFrame(
+            social_network_user_geolocations
+        )
+
+        # Deduplicate the DataFrame by social_network_profile_id and by keeping the hightest level of precision
+        social_network_user_profile_geolocations_df = (
+            social_network_user_profile_geolocations_df.groupby(
+                "social_network_profile_id", as_index=False
+            )
+            .apply(most_precise_location)
+            .reset_index(drop=True)
+        )
+
+        # Return asset
+        yield Output(
+            value=social_network_user_profile_geolocations_df,
+            metadata={
+                "num_rows": social_network_user_profile_geolocations_df.shape[0],
+            },
+        )
+
+================
+File: climate_resilience/assets/social_networks/x.py
+================
+import ast
+import json
+import os
+import time
+from datetime import datetime
+from typing import List, TypedDict
+
+import pandas as pd
+from dagster import (
+    AssetExecutionContext,
+    AssetIn,
+    AssetKey,
+    Output,
+    TimeWindowPartitionMapping,
+    asset,
+)
+
+from ...partitions import hourly_partition_def, three_hour_partition_def
+from ...resources.supabase_resource import SupabaseResource
+from ...resources.x_resource import XResource, XResourceException
+
+
+class Post(TypedDict):
+    article_url: str
+    tweet_id: str
+    tweet_created_at: datetime
+    tweet_conversation_id: str
+    tweet_text: str
+    tweet_public_metrics: str
+    author_id: str
+    author_username: str
+    author_location: str
+    author_description: str
+    author_created_at: datetime
+    author_public_metrics: str
+    partition_hour_utc_ts: datetime
+    record_loading_ts: datetime
+
+
+# Get media feeds
+supabase_resource = SupabaseResource(
+    url=os.environ["SUPABASE_URL"], key=os.environ["SUPABASE_KEY"]
+)
+media_feeds = supabase_resource.get_media_feeds()
+asset_ins = {
+    f"{media_feed['slug']}_articles": AssetIn(
+        AssetKey(["media", str(media_feed["slug"]) + "_articles"]),
+        partition_mapping=TimeWindowPartitionMapping(start_offset=-24),
+    )
+    for _, media_feed in media_feeds.iterrows()
+}
+
+
+@asset(
+    name="x_conversations",
+    description="X conversations that mention this partition's article",
+    io_manager_key="social_networks_io_manager",
+    ins=asset_ins,
+    partitions_def=hourly_partition_def,
+    metadata={"partition_expr": "partition_hour_utc_ts"},
+    output_required=False,
+    compute_kind="python",
+)
+def x_conversations(context: AssetExecutionContext, x_resource: XResource, **kwargs):
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    # Calculate start and end times for the scraping of the social network
+    start_time = partition_time.isoformat(timespec="seconds") + "Z"
+    end_time = (partition_time + pd.Timedelta(hours=1)).isoformat(
+        timespec="seconds"
+    ) + "Z"
+
+    # Create an empty DataFrame that will hold all upstream articles
+    articles_df = pd.DataFrame()
+
+    # Iterate over kwargs and combine into a single dataframe of all articles
+    for asset_key, asset_df in kwargs.items():
+        articles_df = pd.concat([articles_df, asset_df])
+
+    # Deduplicate the articles DataFrame
+    articles_df = articles_df.drop_duplicates(subset=["link"])
+    context.log.info(f"Scraping conversations for {len(articles_df)} articles.")
+
+    # Create an empty DataFrame that will hold all conversations
+    conversations_df = pd.DataFrame()
+    conversations_df = pd.DataFrame(columns=Post.__annotations__.keys())
+
+    # Iterate over the articles and search for tweets that mention the article
+    failure_count = 0
+    index = 0
+
+    while index < len(articles_df):
+        article_row = articles_df.iloc[index]
+        try:
+            search_term = (
+                f'url:"{article_row["link"]}" -RT -is:retweet -is:reply lang:en'
+            )
+
+            # Get posts that mention the article and log consumption to table
+            x_posts = x_resource.search(
+                search_term,
+                n_results=10,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            # Process x_posts and convert each row to a Post dictionary
+            posts: List[Post] = []
+
+            for _, post_row in x_posts.iterrows():
+                post: Post = {
+                    "article_url": article_row["link"],
+                    "tweet_id": str(post_row["tweet_id"]),
+                    "tweet_created_at": pd.to_datetime(
+                        post_row["tweet_created_at"]
+                    ).tz_localize(None),
+                    "tweet_conversation_id": str(post_row["tweet_conversation_id"]),
+                    "tweet_text": post_row["tweet_text"],
+                    "tweet_public_metrics": post_row["tweet_public_metrics"],
+                    "author_id": str(post_row["author_id"]),
+                    "author_username": post_row["author_username"],
+                    "author_location": post_row.get(
+                        "author_location", ""
+                    ),  # Default to empty string
+                    "author_description": post_row.get(
+                        "author_description", ""
+                    ),  # Default to empty string
+                    "author_created_at": pd.to_datetime(
+                        post_row["author_created_at"]
+                    ).tz_localize(None),
+                    "author_public_metrics": post_row["author_public_metrics"],
+                    "partition_hour_utc_ts": partition_time,
+                    "record_loading_ts": datetime.now(),
+                }
+                posts.append(post)
+
+            # Convert the list of Post dictionaries to a DataFrame
+            x_posts_df = pd.DataFrame(posts)
+
+            # Concatenate the new x_posts to the DataFrame
+            conversations_df = pd.concat(
+                [conversations_df, x_posts_df], ignore_index=True
+            )
+
+            # Reset failure count on success
+            failure_count = 0
+            index += 1
+        except XResourceException as e:
+            if e.status_code == 429:
+                # Increment failure count and sleep
+                failure_count += 1
+                sleep_time = 2**failure_count
+
+                if sleep_time > 900:
+                    # Break out of the loop if the sleep time exceeds 900 seconds
+                    break
+
+                time.sleep(sleep_time)
+            else:
+                # If it's a different exception, raise it
+                raise e
+
+    # Return asset
+    yield Output(
+        value=conversations_df,
+        metadata={
+            "num_rows": conversations_df.shape[0],
+        },
+    )
+
+
+@asset(
+    name="x_conversation_posts",
+    description="Posts within X conversations",
+    io_manager_key="social_networks_io_manager",
+    ins={
+        "x_conversations": AssetIn(
+            key=["social_networks", "x_conversations"],
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-4),
+        )
+    },
+    partitions_def=three_hour_partition_def,
+    metadata={"partition_expr": "partition_hour_utc_ts"},
+    compute_kind="python",
+)
+def x_conversation_posts(
+    context,
+    x_conversations,
+    x_resource: XResource,
+):
+    context.log.info(
+        f"Partition key range for x_conversations: {context.asset_partition_key_range_for_input('x_conversations')}"
+    )
+
+    # Get partition's time
+    partition_time_str = context.partition_key
+    partition_time = datetime.strptime(partition_time_str, "%Y-%m-%d-%H:%M")
+
+    # Calculate start and end times for the scraping of the social network
+    start_time = partition_time.isoformat(timespec="seconds") + "Z"
+    end_time = (partition_time + pd.Timedelta(hours=3)).isoformat(
+        timespec="seconds"
+    ) + "Z"
+
+    # Create an empty DataFrame with the specified columns and data types
+    conversation_posts_df = pd.DataFrame()
+    conversation_posts_df = pd.DataFrame(columns=Post.__annotations__.keys())
+
+    # Deduplicate the x_conversations DataFrame
+    x_conversations = x_conversations.drop_duplicates(subset=["tweet_conversation_id"])
+    context.log.info(f"Checking metrics for {len(x_conversations)} conversations.")
+
+    # Get latest metrics for the conversations Create an empty DataFrame with the specified columns and data types
+    conversation_metrics_df = pd.DataFrame()
+    conversation_metrics_df = pd.DataFrame(columns=Post.__annotations__.keys())
+
+    # Batch requests in groups of 100
+    for i in range(0, len(x_conversations), 100):
+        batch = x_conversations.iloc[i : i + 100]
+        tweet_ids = ",".join(batch["tweet_id"].astype(str))
+
+        # Iterate over the conversations and get the latest metrics
+        failure_count = 0
+        index = 0
+        batch__x_conversation_metrics = None
+        try:
+            batch__x_conversation_metrics = x_resource.get_tweets(tweet_ids)
+
+            # Reset failure count on success
+            failure_count = 0
+            index += 1
+        except XResourceException as e:
+            if e.status_code == 429:
+                # Increment failure count and sleep
+                failure_count += 1
+                sleep_time = 2**failure_count
+
+                if sleep_time > 900:
+                    # Break out of the loop if the sleep time exceeds 900 seconds
+                    break
+
+                time.sleep(sleep_time)
+            else:
+                # If it's a different exception, raise it
+                raise e
+
+        # Convert 'tweet_conversation_id'
+        if batch__x_conversation_metrics is not None:
+            batch__x_conversation_metrics["tweet_conversation_id"] = (
+                batch__x_conversation_metrics["tweet_conversation_id"].astype(str)
+            )
+            batch["tweet_conversation_id"] = batch["tweet_conversation_id"].astype(str)
+
+            # Concatenate the batch to the full dataframe of conversation metrics
+            conversation_metrics_df = pd.concat(
+                [
+                    conversation_metrics_df,
+                    batch__x_conversation_metrics,
+                ]
+            )
+
+    # Convert social_network_x_conversations__new_metrics['tweet_public_metrics'] to a dictionary
+    conversation_metrics_df["tweet_public_metrics"] = conversation_metrics_df[
+        "tweet_public_metrics"
+    ].apply(lambda x: ast.literal_eval(x))
+
+    active_conversations_df = conversation_metrics_df[
+        conversation_metrics_df["tweet_public_metrics"].apply(
+            lambda x: x["reply_count"] > 0
+        )
+    ]
+    context.log.info(
+        f"Getting posts from {len(active_conversations_df)} active conversations."
+    )
+
+    # Iterate over the x_conversations and search for replies to the conversation
+    failure_count = 0
+    index = 0
+
+    while index < len(active_conversations_df):
+        article_row = active_conversations_df.iloc[index]
+        try:
+            search_term = f'conversation_id:{article_row["tweet_conversation_id"]} -RT -is:retweet lang:en'
+
+            # Get posts that are replies to the conversation and log consumption to table
+            x_conversation_posts = x_resource.search(
+                search_term,
+                n_results=10,
+                start_time=start_time,
+                end_time=end_time,
+            )
+
+            posts: List[Post] = []
+
+            for _, post_row in x_conversation_posts.iterrows():
+                post: Post = {
+                    "article_url": article_row["article_url"],
+                    "tweet_id": str(post_row["tweet_id"]),
+                    "tweet_created_at": pd.to_datetime(
+                        post_row["tweet_created_at"]
+                    ).tz_localize(None),
+                    "tweet_conversation_id": str(post_row["tweet_conversation_id"]),
+                    "tweet_text": post_row["tweet_text"],
+                    "tweet_public_metrics": post_row["tweet_public_metrics"],
+                    "author_id": str(post_row["author_id"]),
+                    "author_username": post_row["author_username"],
+                    "author_location": post_row.get(
+                        "author_location", ""
+                    ),  # Default to empty string
+                    "author_description": post_row.get(
+                        "author_description", ""
+                    ),  # Default to empty string
+                    "author_created_at": pd.to_datetime(
+                        post_row["author_created_at"]
+                    ).tz_localize(None),
+                    "author_public_metrics": post_row["author_public_metrics"],
+                    "partition_hour_utc_ts": partition_time,
+                    "record_loading_ts": datetime.now(),
+                }
+                posts.append(post)
+
+            # Convert the list of Post dictionaries to a DataFrame
+            x_conversation_posts = pd.DataFrame(posts)
+
+            # Concatenate the new x_posts to the DataFrame
+            conversation_posts_df = pd.concat(
+                [conversation_posts_df, x_conversation_posts], ignore_index=True
+            )
+
+            # Reset failure count on success
+            failure_count = 0
+            index += 1
+        except XResourceException as e:
+            if e.status_code == 429:
+                # Increment failure count and sleep
+                failure_count += 1
+                sleep_time = 2**failure_count
+
+                if sleep_time > 900:
+                    # Break out of the loop if the sleep time exceeds 900 seconds
+                    break
+
+                time.sleep(sleep_time)
+            else:
+                # If it's a different exception, raise it
+                raise e
+
+    # Return asset
+    yield Output(
+        value=conversation_posts_df,
+        metadata={
+            "num_rows": conversation_posts_df.shape[0],
+        },
+    )
+
+================
+File: climate_resilience/io_managers/__init__.py
+================
+from dagster import EnvVar
+from dagster_gcp_pandas import BigQueryPandasIOManager
+
+media_io_manager = BigQueryPandasIOManager(
+    project=EnvVar("BIGQUERY_PROJECT_ID"),
+    dataset=EnvVar("BIGQUERY_MEDIA_DATASET"),
+)
+
+social_networks_io_manager = BigQueryPandasIOManager(
+    project=EnvVar("BIGQUERY_PROJECT_ID"),
+    dataset=EnvVar("BIGQUERY_SOCIAL_NETWORKS_DATASET"),
+)
+
+narratives_io_manager = BigQueryPandasIOManager(
+    project=EnvVar("BIGQUERY_PROJECT_ID"),
+    dataset=EnvVar("BIGQUERY_NARRATIVES_DATASET"),
+)
+
+analytics_io_manager = BigQueryPandasIOManager(
+    project=EnvVar("BIGQUERY_PROJECT_ID"),
+    dataset=EnvVar("BIGQUERY_ANALYTICS_DATASET"),
+)
+
+================
+File: climate_resilience/jobs/__init__.py
+================
+from dagster import AssetKey, AssetSelection, define_asset_job
+
+from ..assets.analytics import analytics_assets
+from ..assets.media.media import media_feed_assets
+from ..partitions import hourly_partition_def, three_hour_partition_def
+
+# Job to refresh media assets
+media_feed_asset_keys = [
+    AssetKey(["media", *asset_def.key.path]) for asset_def in media_feed_assets
+]
+refresh_media_assets_job = define_asset_job(
+    name="refresh_media_assets_job",
+    selection=AssetSelection.assets(*media_feed_asset_keys),
+    partitions_def=hourly_partition_def,
+    tags={"dagster/max_runtime": 30 * 60},
+)
+
+# Job to refresh social network conversation assets
+refresh_social_network_conversation_assets_job = define_asset_job(
+    name="refresh_social_network_conversation_assets_job",
+    selection=AssetSelection.assets(AssetKey(["social_networks", "x_conversations"])),
+    partitions_def=hourly_partition_def,
+    tags={"dagster/max_runtime": 30 * 60},
+)
+
+# Job to refresh social network post assets
+refresh_social_network_post_assets_job = define_asset_job(
+    name="refresh_social_network_post_assets_job",
+    selection=AssetSelection.assets(
+        AssetKey(["social_networks", "x_conversation_posts"]),
+        AssetKey(["social_networks", "user_geolocations"]),
+    ),
+    partitions_def=three_hour_partition_def,
+    tags={"dagster/max_runtime": 30 * 60},
+)
+
+# Job to refresh narrative assets
+refresh_narrative_assets_job = define_asset_job(
+    name="refresh_narrative_assets_job",
+    selection=AssetSelection.assets(
+        AssetKey(["narratives", "conversation_classifications"]),
+        AssetKey(["narratives", "post_narrative_associations"]),
+        AssetKey(["narratives", "conversation_event_summary"]),
+    ),
+    partitions_def=three_hour_partition_def,
+    tags={"dagster/max_runtime": 30 * 60},
+)
+
+# Job to refresh analytics assets
+refresh_analytics_assets_job = define_asset_job(
+    name="refresh_analytics_assets_job",
+    selection=AssetSelection.assets(
+        analytics_assets,
+    ),
+    tags={"dagster/max_runtime": 30 * 60},
+)
+
+================
+File: climate_resilience/partitions/__init__.py
+================
+from datetime import datetime, timedelta
+
+from dagster import HourlyPartitionsDefinition, TimeWindowPartitionsDefinition
+
+# Hourly partition
+hourly_partition_def = HourlyPartitionsDefinition(
+    start_date=datetime.now() - timedelta(days=90),
+)
+
+# 3 hour partition
+three_hour_partition_def = TimeWindowPartitionsDefinition(
+    start=datetime.now() - timedelta(days=90),
+    cron_schedule="0 */3 * * *",
+    fmt="%Y-%m-%d-%H:%M",
+)
+
+================
+File: climate_resilience/resources/__init__.py
+================
+import os
+
+from dagster import file_relative_path
+from dagster_dbt import DbtCliResource
+
+from .gcp_resource import gcp_resource
+from .proxycurl_resource import ProxycurlResource
+from .supabase_resource import SupabaseResource
+from .x_resource import XResource
+
+supabase_resource = SupabaseResource(
+    url=os.environ["SUPABASE_URL"], key=os.environ["SUPABASE_KEY"]
+)
+
+x_resource = XResource(x_bearer_token=os.environ.get("X_BEARER_TOKEN", ""))
+
+proxycurl_resource = ProxycurlResource(api_key=os.environ["PROXYCURL_API_KEY"])
+
+dbt_resource = DbtCliResource(
+    project_dir=file_relative_path(__file__, "../assets/analytics/"),
+    profiles_dir=file_relative_path(__file__, "../assets/analytics/"),
+    profile="climate_resilience_analytics",
+    target="analytics",
+)
+
+================
+File: climate_resilience/resources/gcp_resource.py
+================
+import base64
+import json
+import os
+
+from dagster import EnvVar
+from dagster_gcp import BigQueryResource
+
+# Decode the base64 encoded credentials and write them to a temporary file
+AUTH_FILE = "/tmp/gcp_creds.json"
+with open(AUTH_FILE, "w") as f:
+    json.dump(
+        json.loads(base64.b64decode(os.getenv("BIGQUERY_CREDENTIALS"))),
+        f,
+    )
+
+# Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = AUTH_FILE  # Bundling up Dagster objects
+
+# Resource to interact with the BigQuery database
+gcp_resource = BigQueryResource(
+    project=EnvVar("BIGQUERY_PROJECT_ID"),
+)
+
+================
+File: climate_resilience/resources/proxycurl_resource.py
+================
+import pandas as pd
+import requests
+from dagster import ConfigurableResource
+
+
+class ProxycurlResource(ConfigurableResource):
+    api_key: str
+
+    def get_person_profile(self, x_profile_url):
+        headers = {"Authorization": "Bearer " + self.api_key}
+        api_endpoint = "https://nubela.co/proxycurl/api/v2/linkedin"
+        params = {
+            "twitter_profile_url": x_profile_url,
+        }
+        response = requests.get(api_endpoint, params=params, headers=headers)
+
+        # Check for 404 or other errors
+        if response.status_code == 404:
+            print("Error 404: Profile not found.")
+            return pd.DataFrame()  # Return an empty DataFrame
+
+        if not response.ok:
+            print(f"Error {response.status_code}: {response.text}")
+            return pd.DataFrame()  # Return an empty DataFrame
+
+        # Parse the JSON response
+        response_json = response.json()
+
+        # Extract geographical info
+        geo_info = {
+            "country": response_json.get("country"),
+            "country_full_name": response_json.get("country_full_name"),
+            "city": response_json.get("city"),
+            "state": response_json.get("state"),
+        }
+
+        # Convert to DataFrame
+        response_df = pd.DataFrame([geo_info])
+
+        return response_df
+
+================
+File: climate_resilience/resources/supabase_resource.py
+================
+import pandas as pd
+from supabase import create_client
+
+
+class SupabaseResource:
+    def __init__(self, url: str, key: str):
+        self.supabase = create_client(url, key)
+
+    def get_media_feeds(self):
+        response = (
+            self.supabase.table("media_feeds")
+            .select("*")
+            .eq("is_enabled", "TRUE")
+            .execute()
+        )
+        response_df = pd.DataFrame(response.data)
+        return response_df
+
+================
+File: climate_resilience/resources/x_resource.py
+================
+import pandas as pd
+import requests
+from dagster import ConfigurableResource
+
+
+class XResourceException(Exception):
+    def __init__(self, status_code, message):
+        super().__init__(f"Status Code: {status_code}, Message: {message}")
+        self.status_code = status_code
+
+
+class XResource(ConfigurableResource):
+    x_bearer_token: str
+
+    def bearer_oauth(self, r):
+        """
+        Method required by bearer token authentication.
+        """
+
+        r.headers["Authorization"] = f"Bearer {self.x_bearer_token}"
+        r.headers["User-Agent"] = "v2RecentSearchPython"
+        return r
+
+    def search(
+        self, search_term: str, start_time: str, end_time: str, n_results: int = 10
+    ) -> pd.DataFrame:
+        """
+        Get recent social_network_x_posts based on a search term.
+
+        Parameters:
+        - search_term: The search term to use for the X API query.
+        - start_date: The start date for the X API query.
+        - end_date: The end date for the X API query.
+        - n_results: The maximum number of results to return (default is 10).
+
+        Returns:
+        A list of recent social_network_x_posts related to the search term.
+        """
+
+        query_params = {
+            "query": f"{search_term}",
+            "start_time": start_time,
+            "end_time": end_time,
+            "max_results": n_results,
+            "sort_order": "recency",
+            "tweet.fields": "created_at,conversation_id,author_id,text,public_metrics",
+            "expansions": "author_id",
+            "user.fields": "id,name,username,description,location,created_at,public_metrics",
+        }
+
+        response = requests.get(
+            "https://api.twitter.com/2/tweets/search/recent",
+            auth=self.bearer_oauth,
+            params=query_params,
+        )
+
+        if response.status_code != 200:
+            raise XResourceException(response.status_code, response.text)
+
+        response_json = response.json()
+        tweets_df = self._parse_response_to_dataframe(response_json)
+
+        # Filter out tweets where user's followers_count is less than 50
+        filtered_tweets_df = tweets_df[
+            tweets_df["author_public_metrics"].apply(
+                lambda x: eval(x).get("followers_count", 0) >= 50
+            )
+        ]
+
+        return filtered_tweets_df
+
+    def get_tweets(self, tweet_ids: str) -> pd.DataFrame:
+        """
+        Returns a variety of information about the Tweet specified by the requested list of IDs.
+
+        Parameters:
+        - tweet_ids: A comma separated list of Tweet IDs. Up to 100 are allowed in a single request. Make sure to not include a space between commas and fields.
+
+        Returns:
+        A list of recent social_network_x_posts related to the search term.
+        """
+
+        query_params = {
+            "ids": f"{tweet_ids}",
+            "tweet.fields": "created_at,conversation_id,author_id,text,public_metrics",
+            "expansions": "author_id",
+            "user.fields": "id,name,username,description,created_at,public_metrics",
+        }
+
+        response = requests.get(
+            "https://api.twitter.com/2/tweets",
+            auth=self.bearer_oauth,
+            params=query_params,
+        )
+
+        if response.status_code != 200:
+            raise XResourceException(response.status_code, response.text)
+
+        json_response = response.json()
+        return self._parse_response_to_dataframe(json_response)
+
+    def _parse_response_to_dataframe(self, json_response) -> pd.DataFrame:
+        data = json_response.get("data", [])
+        includes = json_response.get("includes", {}).get("users", [])
+
+        # Create a dictionary for user data for easy lookup
+        users_dict = {user["id"]: user for user in includes}
+
+        # Extract relevant data and construct a list of dictionaries
+        rows = []
+        for tweet in data:
+            user = users_dict.get(tweet["author_id"], {})
+            row = {
+                "tweet_id": tweet["id"],
+                "tweet_created_at": tweet["created_at"],
+                "tweet_conversation_id": tweet["conversation_id"],
+                "tweet_text": tweet["text"],
+                "tweet_public_metrics": tweet["public_metrics"],
+                "author_id": tweet["author_id"],
+                "author_username": user.get("username", ""),
+                "author_location": user.get("location", ""),
+                "author_description": user.get("description", ""),
+                "author_created_at": user.get("created_at", ""),
+                "author_public_metrics": user.get("public_metrics", {}),
+            }
+            rows.append(row)
+
+        # Convert the list of dictionaries into a DataFrame
+        tweet_columns = {
+            "tweet_id": "int64",
+            "tweet_created_at": "datetime64[ns]",
+            "tweet_conversation_id": "int64",
+            "tweet_text": "string",
+            "tweet_public_metrics": "string",
+            "author_id": "int64",
+            "author_username": "string",
+            "author_location": "string",
+            "author_description": "string",
+            "author_created_at": "datetime64[ns]",
+            "author_public_metrics": "string",
+        }
+        df = pd.DataFrame(rows)
+        df = df.reindex(columns=list(tweet_columns.keys()))
+
+        # Convert 'tweet_created_at' and 'author_created_at' to timezone-naive datetimes
+        df["tweet_created_at"] = pd.to_datetime(df["tweet_created_at"], errors="coerce")
+        df["tweet_created_at"] = df["tweet_created_at"].dt.tz_localize(None)
+        df["author_created_at"] = pd.to_datetime(
+            df["author_created_at"], errors="coerce"
+        )
+        df["author_created_at"] = df["author_created_at"].dt.tz_localize(None)
+
+        # Convert the data types of the columns
+        df = df.astype(tweet_columns)
+
+        return df
+
+================
+File: climate_resilience/schedules/__init__.py
+================
+from datetime import timedelta
+
+from dagster import (
+    RunRequest,
+    ScheduleDefinition,
+    build_schedule_from_partitioned_job,
+    schedule,
+)
+
+from ..jobs import (
+    refresh_analytics_assets_job,
+    refresh_media_assets_job,
+    refresh_narrative_assets_job,
+    refresh_social_network_conversation_assets_job,
+    refresh_social_network_post_assets_job,
+)
+from ..partitions import three_hour_partition_def
+
+refresh_media_assets_schedule = build_schedule_from_partitioned_job(
+    job=refresh_media_assets_job
+)
+
+refresh_social_network_conversation_assets_schedule = (
+    build_schedule_from_partitioned_job(
+        refresh_social_network_conversation_assets_job,
+        minute_of_hour=10,
+    )
+)
+
+
+@schedule(
+    job=refresh_social_network_post_assets_job,
+    cron_schedule="20 */3 * * *",
+)
+def refresh_social_network_post_assets_schedule(context):
+    execution_time = context.scheduled_execution_time
+    partition_key = three_hour_partition_def.get_last_partition_key(
+        current_time=execution_time - timedelta(minutes=30)
+    )
+    return RunRequest(partition_key=partition_key)
+
+
+@schedule(
+    job=refresh_narrative_assets_job,
+    cron_schedule="45 */3 * * *",
+)
+def refresh_narrative_assets_schedule(context):
+    execution_time = context.scheduled_execution_time
+    partition_key = three_hour_partition_def.get_last_partition_key(
+        current_time=execution_time - timedelta(minutes=45)
+    )
+    return RunRequest(partition_key=partition_key)
+
+
+refresh_analytics_assets_schedule = ScheduleDefinition(
+    job=refresh_analytics_assets_job, cron_schedule="0 7,19 * * *"
+)
+
+================
+File: climate_resilience/utils/conversations.py
+================
+import pandas as pd
+
+
+def assemble_conversations(
+    context,
+    conversations,
+    posts,
+    classifications=None,
+    event_summaries=None,
+    articles=None,
+):
+    # Create base dataframe of all posts coming from both conversations and posts
+    assembled_conversations = conversations[
+        [
+            "tweet_id",
+            "tweet_conversation_id",
+            "tweet_created_at",
+            "tweet_text",
+            "article_url",
+        ]
+    ]
+    assembled_conversations = pd.concat(
+        [
+            assembled_conversations,
+            posts[
+                [
+                    "tweet_id",
+                    "tweet_conversation_id",
+                    "tweet_created_at",
+                    "tweet_text",
+                    "article_url",
+                ]
+            ],
+        ],
+        ignore_index=True,
+    )
+
+    # Join conversations to that base dataframe
+    assembled_conversations = pd.merge(
+        assembled_conversations,
+        conversations[["tweet_conversation_id", "tweet_text"]],
+        how="left",
+        on="tweet_conversation_id",
+    )
+    assembled_conversations = assembled_conversations.rename(
+        columns={
+            "tweet_id": "post_id",
+            "tweet_conversation_id": "post_conversation_id",
+            "tweet_created_at": "post_created_at",
+            "tweet_text_x": "post_text",
+            "tweet_article_url": "article_url",
+            "tweet_text_y": "initial_post_text",
+        }
+    )
+
+    # Join articles
+    if articles is not None:
+        articles = articles.rename(
+            columns={"link": "article_url", "summary": "article_summary"}
+        )
+        assembled_conversations = pd.merge(
+            assembled_conversations,
+            articles[["article_url", "article_summary"]],
+            how="left",
+            on="article_url",
+        )
+
+    # Join event summaries
+    if event_summaries is not None:
+        event_summaries = event_summaries.rename(
+            columns={
+                "CONVERSATION_ID": "post_conversation_id",
+                "EVENT_SUMMARY": "event_summary",
+            }
+        )
+        assembled_conversations = pd.merge(
+            assembled_conversations,
+            event_summaries[["post_conversation_id", "event_summary"]],
+            how="left",
+            on="post_conversation_id",
+        )
+
+    # Coalesce event summaries and article summaries
+    if "event_summary" in assembled_conversations.columns:
+        assembled_conversations["event_summary"] = assembled_conversations[
+            "event_summary"
+        ].combine_first(assembled_conversations["article_summary"])
+    else:
+        if "article_summary" in assembled_conversations.columns:
+            assembled_conversations["event_summary"] = assembled_conversations[
+                "article_summary"
+            ]
+        else:
+            assembled_conversations["event_summary"] = None
+
+    # Filter by classifcation
+    if classifications is not None:
+        classifications = classifications.rename(
+            columns={"conversation_id": "post_conversation_id"}
+        )
+        assembled_conversations = pd.merge(
+            assembled_conversations,
+            classifications[["post_conversation_id", "classification"]],
+            how="left",
+            on="post_conversation_id",
+        )
+        assembled_conversations = assembled_conversations[
+            assembled_conversations["classification"] == "True"
+        ]
+
+    # Final selection of columns
+    assembled_conversations = assembled_conversations[
+        [
+            "post_id",
+            "post_conversation_id",
+            "post_created_at",
+            "post_text",
+            "initial_post_text",
+            "event_summary",
+        ]
+    ]
+
+    return assembled_conversations
+
+================
+File: climate_resilience/__init__.py
+================
+import base64
+import json
+import os
+
+from dagster import Definitions
+
+from .assets.analytics import analytics_assets
+from .assets.media import media_assets
+from .assets.narratives import narratives_assets
+from .assets.social_networks import social_networks_assets
+from .io_managers import (
+    analytics_io_manager,
+    media_io_manager,
+    narratives_io_manager,
+    social_networks_io_manager,
+)
+from .jobs import (
+    refresh_analytics_assets_job,
+    refresh_media_assets_job,
+    refresh_narrative_assets_job,
+    refresh_social_network_conversation_assets_job,
+    refresh_social_network_post_assets_job,
+)
+from .resources import (
+    dbt_resource,
+    gcp_resource,
+    proxycurl_resource,
+    supabase_resource,
+    x_resource,
+)
+from .schedules import (
+    refresh_analytics_assets_schedule,
+    refresh_media_assets_schedule,
+    refresh_narrative_assets_schedule,
+    refresh_social_network_conversation_assets_schedule,
+    refresh_social_network_post_assets_schedule,
+)
+
+# Create temp file for GCP credentials
+AUTH_FILE = "/tmp/gcp_creds.json"
+with open(AUTH_FILE, "w") as f:
+    json.dump(json.loads(base64.b64decode(str(os.getenv("BIGQUERY_CREDENTIALS")))), f)
+
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = AUTH_FILE
+
+
+# Define the Dagster app
+defs = Definitions(
+    assets=[
+        *media_assets,
+        *social_networks_assets,
+        *narratives_assets,
+        analytics_assets,
+    ],
+    jobs=[
+        refresh_analytics_assets_job,
+        refresh_media_assets_job,
+        refresh_social_network_conversation_assets_job,
+        refresh_social_network_post_assets_job,
+        refresh_narrative_assets_job,
+    ],
+    schedules=[
+        refresh_analytics_assets_schedule,
+        refresh_media_assets_schedule,
+        refresh_social_network_conversation_assets_schedule,
+        refresh_social_network_post_assets_schedule,
+        refresh_narrative_assets_schedule,
+    ],
+    resources={
+        "media_io_manager": media_io_manager,
+        "social_networks_io_manager": social_networks_io_manager,
+        "narratives_io_manager": narratives_io_manager,
+        "analytics_io_manager": analytics_io_manager,
+        "dbt_resource": dbt_resource,
+        "gcp_resource": gcp_resource,
+        "proxycurl_resource": proxycurl_resource,
+        "supabase_resource": supabase_resource,
+        "x_resource": x_resource,
+    },
+)
+
+================
+File: design/semantic_layer.dbml
+================
+project climate_resilience {
+
+    database_type: 'bigquery'
+    note: '''
+        # RepublicOfData.io Climate Resilience data platform
+
+        columns are ordered by type, then mostly by alphabetical order.
+    '''
+}
+
+table media_articles_fct {
+
+    // join keys
+    media_article_pk varchar [pk, note: '''the primary key of the table''']
+
+    // unique identifier fields - regular
+    article_url varchar [note: '''the url of the article. example: 'https://www.bbc.co.uk/news/uk-12345678' ''']
+    media_source varchar [note: '''the source of the article. example: 'bbc' ''']
+
+    // strings
+    article_title varchar [note: '''the title of the article. example: 'The UK is going to the moon' ''']
+    article_summary varchar [note: '''a summary of the article. example: 'The UK is going to the moon, and it will be great' ''']
+    article_tags varchar [note: '''the tags of the article. example: 'uk, moon, great' ''']
+    article_author varchar [note: '''the author of the article. example: 'John Doe' ''']
+    article_medias varchar [note: '''the media attachments from this article. example: 'image1.jpg, image2.jpg' ''']
+
+    // timestamps
+    article_publication_ts timestamp [note: '''the publication timestamp of the article. example: '2021-01-01 12:00:00' ''']
+    article_modification_ts timestamp [note: '''the modification timestamp of the article. example: '2021-01-01 12:00:00' ''']
+}
+
+table social_network_conversations_dim {
+
+    // join keys
+    social_network_conversation_pk varchar [pk, note: '''the primary key of the table''']
+    media_article_fk varchar [ref: > media_articles_fct.media_article_pk, note: '''the foreign key of the media article table''']
+
+    // unique identifier fields - regular
+    social_network_source varchar [note: '''the name of the social network. example: 'twitter' ''']
+    conversation_natural_key varchar [note: '''the natural key of the conversation. example: '12345678' ''']
+    classification varchar [note: '''classification as to whether the conversation focuses on a climate issue or now''']
+    event_summary varchart [note: '''summary of the climate event being discussed''']
+
+    // timestamps
+    earliest_post_creation_ts timestamp [note: '''the earliest creation timestamp of a post associated to this conversation. example: '2021-01-01 12:00:00' ''']
+    
+}
+
+table social_network_posts_fct {
+
+    // join keys
+    social_network_post_pk varchar [pk, note: '''the primary key of the table''']
+    social_network_conversation_fk varchar [ref: > social_network_conversations_dim.social_network_conversation_pk, note: '''the primary key of the table''']
+    social_network_user_profile_fk varchar [ref: > social_network_user_profiles_dim.social_network_user_profile_pk, note: '''the primary key of the table''']
+
+    // unique identifier fields - regular
+    conversation_natural_key varchar [note: '''the natural key of the conversation. example: '12345678' ''']
+    social_network_source varchar [note: '''the name of the social network. example: 'twitter' ''']
+    post_natural_key varchar [note: '''the natural key of the post. example: '12345678' ''']
+
+    // strings
+    post_url varchar [note: '''the url of the post. example: 'https://twitter.com/johndoe/status/12345678' ''']
+    post_text varchar [note: '''the text of the post. example: 'The UK is going to the moon' ''']
+    discourse_type varchar [note: '''classification of discourse as whether it is biophysical, critical, dismissive or integrative.''']
+
+    // timestamps
+    post_creation_ts timestamp [note: '''the creation timestamp of the post. example: '2021-01-01 12:00:00' ''']
+    
+}
+
+table social_network_user_profiles_dim {
+
+    // join keys
+    social_network_user_profile_pk varchar [pk, note: '''the primary key of the table''']
+
+    // unique identifier fields - regular
+    social_network_source varchar [note: '''the name of the social network. example: 'twitter' ''']
+    social_network_profile_natural_key varchar [note: '''the natural key of the post author. example: '12345678' ''']
+
+    // strings
+    social_network_profile_username varchar [note: '''the author of the post. example: 'John Doe' ''']
+    social_network_profile_description varchar [note: '''the description of the post author. example: 'I am a great person' ''']
+    social_network_profile_location_name varchar [note: '''the location of the post author. example: 'London' ''']
+    social_network_profile_location_country_name varchar [note: '''the country name of the post author. example: 'United Kingdom' ''']
+    social_network_profile_location_country_code varchar [note: '''the country code of the post author. example: 'UK' ''']
+    social_network_profile_location_admin_name1 varchar [note: '''the admin1 name of the post author. example: 'England' ''']
+    social_network_profile_location_admin_code1 varchar [note: '''the admin1 code of the post author. example: 'ENG' ''']
+    social_network_profile_location_latitude numeric [note: '''the latitude of the post author. example: 51.5074''']
+    social_network_profile_location_longitude numeric [note: '''the longitude of the post author. example: -0.1278''']
+    social_network_profile_location_h3_r3 varchar [note: '''the h3 geographical cell (at resolution 3) of the post author.''']
+
+    // timestamps
+    social_network_profile_creation_ts timestamp [note: '''the creation timestamp of the post author. example: '2021-01-01 12:00:00' ''']
+    
+}
+
+================
+File: documentation/climate_discourse_framework.md
+================
+# Climate Discourse Framework: Categories and Sub-Categories
+
+## Introduction
+Climate change is one of the most pressing global challenges, and how it is discussed—across regions, sectors, and communities—plays a critical role in shaping perceptions, policies, and actions. The **Climate Discourse Framework** provides a structured approach to categorize and analyze these discussions, enabling a deeper understanding of the diverse perspectives and narratives around climate change.
+
+This framework builds on the foundational work of Leichenko & O’Brien, which identifies four primary discourses about climate change: **Biophysical**, **Critical**, **Dismissive**, and **Integrative**. While these high-level categories are useful for organizing broad perspectives, this framework introduces **sub-categories** to capture the nuanced and specific narratives emerging within each discourse.
+
+### Purpose of the Framework
+The goal of the Climate Discourse Framework is to:
+- Provide a systematic way to analyze climate narratives across time and geography.
+- Enable more precise tracking of how narratives form, compete, and evolve.
+- Support policymakers, researchers, and communicators in identifying key narratives and designing targeted strategies.
+
+### Why Sub-Categories?
+High-level categories are essential for framing broad trends, but climate discourse is highly complex and context-dependent. Sub-categories allow for:
+- **Granularity**: Breaking down broader discourses into specific themes for richer analysis.
+- **Relevance**: Capturing emerging narratives and evolving public perceptions.
+- **Actionability**: Providing actionable insights for communication, policymaking, and advocacy.
+
+The following sections outline the framework’s four main categories and their corresponding sub-categories, each designed to reflect the diversity and complexity of climate change discussions.
+
+---
+
+## 1. Biophysical
+Climate change is seen as an environmental challenge addressable through technological, policy, and individual interventions.
+
+- **Technological Solutions**: Innovations in renewable energy, carbon capture, and other green technologies.
+- **Policy Advocacy**: Calls for regulatory measures, carbon pricing, and international agreements.
+- **Behavioral Change**: Emphasis on individual actions and lifestyle modifications to reduce emissions.
+- **Nature-Based Solutions**: Strategies involving reforestation, ecosystem restoration, and biodiversity conservation.
+- **Disaster Preparedness**: Adaptation measures aimed at enhancing resilience against climate impacts.
+
+---
+
+## 2. Critical
+Climate change is viewed as a systemic issue rooted in social, economic, and political structures.
+
+- **Climate Justice**: Focus on equity and the disproportionate impact on marginalized communities.
+- **Fossil Fuel Opposition**: Critiques of fossil fuel industries and their role in perpetuating emissions.
+- **Economic Critique**: Arguments against unsustainable consumption and economic models that drive environmental degradation.
+- **Global Inequities**: Discussions on the uneven responsibilities and impacts between the Global North and South.
+- **Corporate Accountability**: Demands for holding corporations responsible for environmental harm and greenwashing.
+
+---
+
+## 3. Dismissive
+Climate change is considered either a non-issue or not urgent, often prioritizing economic or ideological arguments over environmental concerns.
+
+- **Climate Skepticism**: Disputes regarding the existence or anthropogenic causes of climate change.
+- **Economic Prioritization**: Claims that economic growth and job creation should take precedence over climate action.
+- **Downplaying Impacts**: Narratives minimizing the severity or consequences of climate change.
+- **Anti-Regulation**: Opposition to government interventions and climate-related policies.
+- **Conspiracy Theories**: Beliefs that climate change is fabricated or manipulated for ulterior motives.
+
+---
+
+## 4. Integrative
+Climate change is understood as a complex, multifaceted issue requiring holistic solutions that bridge environmental and social dimensions.
+
+- **Systems Thinking**: Emphasis on the interconnectedness of human and environmental systems.
+- **Cultural Shifts**: Calls for a rethinking of societal values and the incorporation of diverse knowledge systems.
+- **Sustainable Development**: Balancing economic growth with environmental stewardship and social equity.
+- **Interdisciplinary Approaches**: Combining insights from science, humanities, and policy to craft integrated solutions.
+- **Behavioral Science**: Exploring the psychological and cultural dimensions influencing climate action.
+- **Emerging Narratives**: Capturing evolving themes such as digital activism, climate anxiety, and other novel discourses.
+
+---
+
+This framework provides a structured approach to classify and analyze climate change discourse, capturing both broad themes and detailed sub-narratives.
+
+================
+File: .gitignore
+================
+# vscode
+**/.vscode/settings.json
+
+# Environments
+**/.env
+**/.venv*
+poetry.lock
+
+# local files
+.DS_Store
+.vscode
+
+# python
+dist
+logs
+__pycache__
+
+# dagster
+.dagster
+
+# dbt
+**/target/*
+!**/target/manifest.json
+
+**/dbt_packages/
+**/logs/
+**/.user.yml
+**/package-lock.yml
+
+================
+File: =
+================
+The following packages are already present in the pyproject.toml and will be skipped:
+
+  • langchain-core
+
+If you want to update it to the latest compatible version, you can use `poetry update package`.
+If you prefer to upgrade it to the latest available version, you can use `poetry add package@latest`.
+
+================
+File: CLAUDE.md
+================
+# Climate Resilience Platform Dev Guide
+
+## Build Commands
+- `make dagster` - Run Dagster development server
+- `dbt parse --profiles-dir climate_resilience/assets/analytics --project-dir climate_resilience/assets/analytics` - Parse DBT models
+- `poetry install` - Install dependencies
+- `poetry run python -m pytest` - Run tests (when implemented)
+
+## Code Style Guidelines
+- **Imports**: Standard library first, third-party libs second, project modules last
+- **Naming**: Classes use PascalCase, functions/variables use snake_case, constants use UPPER_SNAKE_CASE
+- **Types**: Use type hints extensively with Python's typing module
+- **Documentation**: Classes and functions should have docstrings with descriptions, parameters, and return values
+- **Error Handling**: Create custom exception classes, use explicit error checking, provide informative error messages
+- **Data Processing**: Use Pandas for data manipulation with explicit type conversions
+- **Format**: 4-space indentation, max line length ~88 chars, consistent spacing around operators
+
+## Key Technologies
+- **Dagster**: Data orchestration framework
+- **DBT**: Data transformation tool
+- **LangChain**: Framework for LLM applications
+- **Pandas**: Data manipulation and analysis
+- **Pydantic**: Data validation and settings management
+
+================
+File: dagster_cloud_post_install.sh
+================
+dbt deps --project-dir ./climate_resilience/assets/analytics --profiles-dir ./climate_resilience/assets/analytics
+
+================
+File: dagster_cloud_pre_install.sh
+================
+apt update && apt install g++ -y
+
+================
+File: dagster_cloud.yaml
+================
+locations:
+  - location_name: climate-resilience
+    code_source:
+      package_name: climate_resilience
+
+================
+File: dagster.yaml
+================
+storage:
+  sqlite:
+    base_dir: "./.dagster"
+
+local_artifact_storage:
+  module: dagster.core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: "./.dagster"
+
+================
+File: Makefile
+================
+.PHONY: docker
+
+dagster:
+	dbt parse --profiles-dir climate_resilience/assets/analytics --project-dir climate_resilience/assets/analytics
+	dagster dev --module-name climate_resilience
+
+dbdocs:
+	dbdocs build design/semantic_layer.dbml --project "Climate Resilience"
+
+================
+File: pyproject.toml
+================
+[tool.poetry]
+name = "climate-resilience"
+version = "0.1.0"
+description = ""
+authors = ["Olivier Dupuis <olivier@republicofdata.io>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+dagster = "1.9.3"
+dagster-dbt = "0.25.3"
+dagster-gcp = "0.25.3"
+dagster-gcp-pandas = "0.25.3"
+dagster-webserver = "1.9.3"
+dbt-bigquery = "1.8.3"
+dbt-core = "1.8.8"
+duckduckgo-search = "6.3.7"
+feedparser = "6.0.11"
+langchain-community = "0.3.9"
+langchain-core = "0.3.21"
+langchain-openai = "0.2.11"
+langgraph = "0.2.56"
+pandas = "2.2.3"
+pydantic = "2.9.2"
+spacy = "3.7.5"
+supabase = "2.10.0"
+thinc = "8.2.5"
+wikipedia = "1.4.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+================
+File: README.md
+================
+# Climate Resilience Data Platform
+
+The **Climate Resilience Data Platform** provides structured, AI-driven insights into how climate change is discussed across regions and time. By categorizing public discourse into key narratives, the platform helps researchers, policymakers, and communicators track sentiment shifts and emerging trends with precision.
+  
+**Key Features**
+- **Geotemporal Analysis** – Understand how climate narratives evolve over time and across locations.
+- **AI-Powered Classification** – Identify dominant themes (e.g., Biophysical, Critical, Dismissive, Integrative). Learn more about our **[Climate Discourse Framework](documentation/climate_discourse_framework.md)**.
+- **Structured Data Outputs** – Actionable datasets for research, policy, and communication.
+- **Open-Source & Scalable** – Built with transparency and efficiency in mind.
+
+**Who It’s For**
+- **Researchers** – Analyze public sentiment and discourse trends.
+- **Policymakers** – Inform climate strategies with real-time narrative insights.
+- **Communicators** – Shape messaging based on prevailing public perceptions.
+
+**Learn More**
+- **GitHub**: [Open-source platform](https://github.com/republicofdata-io/climate_resilience)
+- **Substack**: [Weekly climate narrative insights](https://climatenarratives.substack.com/)
+- **Developed by**: [RepublicOfData.io](https://republicofdata.io/)
+- **Contact**: Olivier Dupuis | [olivier@republicofdata.io](mailto:olivier@republicofdata.io)
+
+================
+File: setup.py
+================
+from setuptools import find_packages, setup
+
+if __name__ == "__main__":
+    setup(
+        name="climate_resilience",
+        packages=find_packages(),
+        install_requires=[
+            "dagster==1.9.3",
+            "dagster-cloud==1.9.3",
+            "dagster-dbt==0.25.3",
+            "dagster-gcp==0.25.3",
+            "dagster-gcp-pandas==0.25.3",
+            "dbt-bigquery==1.8.3",
+            "dbt-core==1.8.8",
+            "duckduckgo-search==6.3.7",
+            "feedparser==6.0.11",
+            "langchain-community==0.3.9",
+            "langchain-core==0.3.21",
+            "langchain-openai==0.2.11",
+            "langgraph==0.2.56",
+            "pandas==2.2.3",
+            "pydantic==2.9.2",
+            "spacy==3.7.5",
+            "supabase==2.10.0",
+            "thinc==8.2.5",
+            "wikipedia==1.4.0",
+        ],
+    )
+
+
+
+================================================================
+End of Codebase
+================================================================
